@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
 import 'package:pug_flutter_sdk/src/event_queue_storage.dart';
@@ -180,6 +182,46 @@ void main() {
       expect(subscription.properties['pushProvider'], 'fake');
     },
   );
+
+  test(
+    'FCM provider supplies token and extracts remote message data',
+    () async {
+      var deleted = false;
+      final provider = FcmPushProvider(
+        getToken: () async => 'fcm-token',
+        deleteToken: () async {
+          deleted = true;
+        },
+        targetPlatform: TargetPlatform.android,
+      );
+
+      expect(provider.provider, 'fcm');
+      expect(provider.platform, 'android');
+      expect(await provider.getToken(), 'fcm-token');
+
+      await provider.deleteToken();
+      expect(deleted, isTrue);
+
+      final data = provider.notificationData(
+        const RemoteMessage(
+          data: <String, String>{'campaignId': 'campaign-1'},
+          messageId: 'message-1',
+          notification: RemoteNotification(title: 'Title', body: 'Body'),
+        ),
+      );
+
+      expect(data['campaignId'], 'campaign-1');
+      expect(data['messageId'], 'message-1');
+      expect(data['title'], 'Title');
+      expect(data['body'], 'Body');
+    },
+  );
+
+  test('FCM provider reports unavailable tokens', () async {
+    final provider = FcmPushProvider(getToken: () async => null);
+
+    await expectLater(provider.getToken(), throwsA(isA<PugException>()));
+  });
 
   test(
     'notification payload is sanitized and clicked event gets campaign fallback',

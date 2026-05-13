@@ -8,6 +8,7 @@ environment:
   flutter: ">=1.17.0"
 
 dependencies:
+  firebase_messaging: ^16.2.1
   fixnum: ^1.1.1
   flutter:
     sdk: flutter
