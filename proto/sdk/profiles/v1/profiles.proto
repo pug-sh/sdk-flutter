@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package sdk.profiles.v1;
+
+import "google/protobuf/struct.proto";
+
+service ProfilesSDKService {
+  rpc Identify(IdentifyRequest) returns (IdentifyResponse);
+}
+
+message IdentifyRequest {
+  string external_id = 1;
+  google.protobuf.Struct traits = 2;
+  string anonymous_id = 3;
+  string device_id = 4;
+}
+
+message IdentifyResponse {}

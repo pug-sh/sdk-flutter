@@ -1,0 +1,29 @@
+# Dart and Flutter
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+
+# Pub
+.pub-cache/
+.pub/
+pubspec.lock
+
+# IDE and editor state
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Coverage and test output
+coverage/
+test-results/
+
+# Logs
+*.log

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package sdk.devices.v1;
+
+import "google/protobuf/struct.proto";
+
+service DevicesService {
+  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
+  rpc UpdateStatus(UpdateStatusRequest) returns (UpdateStatusResponse);
+  rpc UpdateToken(UpdateTokenRequest) returns (UpdateTokenResponse);
+}
+
+message SubscribeRequest {
+  string device_id = 1;
+  string platform = 2;
+  string profile_external_id = 3;
+  string profile_id = 4;
+  string token = 5;
+  google.protobuf.Struct properties = 6;
+}
+
+message SubscribeResponse {}
+
+message UpdateStatusRequest {
+  string id = 1;
+  string status = 2;
+}
+
+message UpdateStatusResponse {}
+
+message UpdateTokenRequest {
+  string id = 1;
+  string token = 2;
+}
+
+message UpdateTokenResponse {}
