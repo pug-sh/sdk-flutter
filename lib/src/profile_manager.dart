@@ -17,13 +17,9 @@ class ProfileState {
   };
 
   static ProfileState? fromJson(Map<String, Object?> json) {
-    try {
-      return ProfileState(
-        anonymousId: json['anonymousId']! as String,
-        externalId: json['externalId'] as String?,
-      );
-    } catch (_) {
-      return null;
-    }
+    return ProfileState(
+      anonymousId: json['anonymousId']! as String,
+      externalId: json['externalId'] as String?,
+    );
   }
 }

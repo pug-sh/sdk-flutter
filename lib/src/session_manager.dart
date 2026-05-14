@@ -28,15 +28,11 @@ class SessionState {
   };
 
   static SessionState? fromJson(Map<String, Object?> json) {
-    try {
-      return SessionState(
-        sessionId: json['sessionId']! as String,
-        startTime: json['startTime']! as int,
-        lastActivityTime: json['lastActivityTime']! as int,
-        deviceId: json['deviceId']! as String,
-      );
-    } catch (_) {
-      return null;
-    }
+    return SessionState(
+      sessionId: json['sessionId']! as String,
+      startTime: json['startTime']! as int,
+      lastActivityTime: json['lastActivityTime']! as int,
+      deviceId: json['deviceId']! as String,
+    );
   }
 }

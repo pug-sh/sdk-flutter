@@ -175,13 +175,21 @@ class PropertyMapper {
     if (value is Iterable || value is Map) {
       try {
         return PropertyValue.string(_truncateUtf8(jsonEncode(value), 1024));
-      } catch (_) {
+      } catch (_, stackTrace) {
+        logger.warn(
+          'Pug could not JSON encode property value of type ${value.runtimeType}.',
+        );
+        logger.debug(stackTrace.toString());
         return _dropUnsupported(value);
       }
     }
     try {
       return PropertyValue.string(_truncateUtf8(jsonEncode(value), 1024));
-    } catch (_) {
+    } catch (_, stackTrace) {
+      logger.warn(
+        'Pug could not JSON encode property value of type ${value.runtimeType}.',
+      );
+      logger.debug(stackTrace.toString());
       return _dropUnsupported(value);
     }
   }

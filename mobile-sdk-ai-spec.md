@@ -19,8 +19,10 @@ registration SDK. The current web SDK exposes:
 
 Core invariants to preserve:
 
-- `track()` must never throw or crash the host app. It is best-effort only.
-- `init()`, `identify()`, and push registration may report explicit failures.
+- Public SDK APIs must never throw or crash the host app. They are best-effort
+  only.
+- `init()`, `identify()`, and push registration should log/report failures
+  without throwing to the host app.
 - SDK state is single-instance by default. Repeated `init()` should warn/no-op.
 - Events are protobuf `sdk.events.v1.Event` messages sent through
   `sdk.events.v1.EventsService.BatchCreate`.
@@ -308,7 +310,8 @@ Implement anonymous and identified profiles:
 - If a device ID exists, first identify should include it for push device
   linking if the backend request type supports that field.
 
-`identify()` should throw/report errors to the caller. `track()` should not.
+`identify()` should log/report errors without throwing to the caller. `track()`
+should not throw.
 
 ## Batching
 

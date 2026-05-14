@@ -1,4 +1,4 @@
-import 'errors.dart';
+import 'contracts.dart';
 import 'pug.dart';
 import 'push_models.dart';
 
@@ -7,23 +7,27 @@ export 'push_models.dart';
 class PugPush {
   PugPush._();
 
+  static const PugLogger _fallbackLogger = SafePugLogger(
+    DebugPrintPugLogger(),
+  );
+
   static Future<void> subscribe(
     PushProvider provider, {
     PushSubscribeOptions options = const PushSubscribeOptions(),
   }) async {
-    final client = Pug.shared.clientOrNull;
-    if (client == null) {
-      throw const PugException('Pug has not been initialized.');
+    try {
+      await Pug.shared.clientOrNull?.subscribePush(provider, options: options);
+    } catch (error, stackTrace) {
+      _fallbackLogger.error('Pug push subscribe failed.', error, stackTrace);
     }
-    await client.subscribePush(provider, options: options);
   }
 
   static Future<void> unsubscribe(PushProvider provider) async {
-    final client = Pug.shared.clientOrNull;
-    if (client == null) {
-      throw const PugException('Pug has not been initialized.');
+    try {
+      await Pug.shared.clientOrNull?.unsubscribePush(provider);
+    } catch (error, stackTrace) {
+      _fallbackLogger.error('Pug push unsubscribe failed.', error, stackTrace);
     }
-    await client.unsubscribePush(provider);
   }
 
   static void trackNotificationOpened(Map<Object?, Object?> data) {

@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'auto_properties.dart';
 import 'configuration.dart';
-import 'errors.dart';
+import 'contracts.dart';
 import 'runtime.dart';
 import 'shared_preferences_storage.dart';
 
@@ -10,6 +10,9 @@ class Pug {
   Pug._();
 
   static final Pug _shared = Pug._();
+  static const PugLogger _fallbackLogger = SafePugLogger(
+    DebugPrintPugLogger(),
+  );
 
   static Pug get shared => _shared;
 
@@ -44,29 +47,39 @@ class Pug {
   static void destroy() => _shared.destroyClient();
 
   Future<void> initialize(String projectId, PugOptions options) async {
-    if (projectId.trim().isEmpty) {
-      throw const PugException('projectId is required.');
+    final logger = SafePugLogger(options.logger);
+    try {
+      if (projectId.trim().isEmpty) {
+        logger.error('Pug init skipped: projectId is required.');
+        return;
+      }
+      if (options.apiKey.trim().isEmpty) {
+        logger.error('Pug init skipped: apiKey is required.');
+        return;
+      }
+      if (_client != null) {
+        logger.warn('Pug is already initialized; repeated init ignored.');
+        return;
+      }
+      final resolvedOptions = options.copyWith(
+        logger: logger,
+        storage: options.storage ?? await SharedPreferencesPugStorage.create(),
+        autoPropertyProvider:
+            options.autoPropertyProvider ??
+            await SystemPugAutoPropertyProvider.create(logger: logger),
+      );
+      final client = PugClient(
+        projectId: projectId,
+        options: resolvedOptions,
+        lifecycleBinding: WidgetsBinding.instance,
+      );
+      await client.start();
+      if (client.isStarted) {
+        _client = client;
+      }
+    } catch (error, stackTrace) {
+      logger.error('Pug init failed.', error, stackTrace);
     }
-    if (options.apiKey.trim().isEmpty) {
-      throw const PugException('apiKey is required.');
-    }
-    if (_client != null) {
-      options.logger.warn('Pug is already initialized; repeated init ignored.');
-      return;
-    }
-    final resolvedOptions = options.copyWith(
-      storage: options.storage ?? await SharedPreferencesPugStorage.create(),
-      autoPropertyProvider:
-          options.autoPropertyProvider ??
-          await SystemPugAutoPropertyProvider.create(logger: options.logger),
-    );
-    final client = PugClient(
-      projectId: projectId,
-      options: resolvedOptions,
-      lifecycleBinding: WidgetsBinding.instance,
-    );
-    await client.start();
-    _client = client;
   }
 
   void capture(
@@ -81,21 +94,48 @@ class Pug {
     String externalId, {
     Map<String, Object?> traits = const {},
   }) async {
-    final client = _client;
-    if (client == null) {
-      throw const PugException('Pug has not been initialized.');
+    try {
+      final client = _client;
+      if (client == null) {
+        return;
+      }
+      await client.identify(externalId, traits: traits);
+    } catch (error, stackTrace) {
+      _fallbackLogger.error('Pug identify failed.', error, stackTrace);
     }
-    await client.identify(externalId, traits: traits);
   }
 
-  void resetClient() => _client?.reset();
+  void resetClient() {
+    try {
+      _client?.reset();
+    } catch (error, stackTrace) {
+      _fallbackLogger.error('Pug reset failed.', error, stackTrace);
+    }
+  }
 
-  void rotateClient() => _client?.rotate();
+  void rotateClient() {
+    try {
+      _client?.rotate();
+    } catch (error, stackTrace) {
+      _fallbackLogger.error('Pug rotate failed.', error, stackTrace);
+    }
+  }
 
-  Future<void> flushClient() async => _client?.flushAll();
+  Future<void> flushClient() async {
+    try {
+      await _client?.flushAll();
+    } catch (error, stackTrace) {
+      _fallbackLogger.error('Pug flush failed.', error, stackTrace);
+    }
+  }
 
   void destroyClient() {
-    _client?.destroy();
-    _client = null;
+    try {
+      _client?.destroy();
+    } catch (error, stackTrace) {
+      _fallbackLogger.error('Pug destroy failed.', error, stackTrace);
+    } finally {
+      _client = null;
+    }
   }
 }

@@ -37,6 +37,45 @@ class DebugPrintPugLogger implements PugLogger {
   }
 }
 
+class SafePugLogger implements PugLogger {
+  const SafePugLogger(this.delegate);
+
+  final PugLogger delegate;
+
+  @override
+  void debug(String message) {
+    try {
+      delegate.debug(message);
+    } catch (error) {
+      _logLoggerFailure('debug', error);
+    }
+  }
+
+  @override
+  void warn(String message) {
+    try {
+      delegate.warn(message);
+    } catch (error) {
+      _logLoggerFailure('warn', error);
+    }
+  }
+
+  @override
+  void error(String message, [Object? error, StackTrace? stackTrace]) {
+    try {
+      delegate.error(message, error, stackTrace);
+    } catch (loggerError) {
+      _logLoggerFailure('error', loggerError);
+    }
+  }
+
+  void _logLoggerFailure(String level, Object error) {
+    try {
+      debugPrint('[Pug][logger] $level log handler failed: $error');
+    } catch (_) {}
+  }
+}
+
 abstract interface class PugStorage {
   String? getString(String key);
   void setString(String key, String value);
@@ -93,8 +132,10 @@ class SafePugStorage implements PugStorage {
   T _guard<T>(T Function() action, T Function() fallback) {
     try {
       return action();
-    } catch (_) {
+    } catch (error, stackTrace) {
       _logger.warn('Pug persistent storage failed; using memory fallback.');
+      _logger.debug(error.toString());
+      _logger.debug(stackTrace.toString());
       _useFallback = true;
       return fallback();
     }

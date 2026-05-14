@@ -10,7 +10,7 @@ The goal is product-semantic parity where it makes sense for mobile. Browser-onl
 |---|---|---|---|
 | Singleton lifecycle | `init`, `destroy`, `reset`, `rotate` | `Pug.init`, `Pug.destroy`, `Pug.reset`, `Pug.rotate` | Complete |
 | Manual event tracking | `track(kind, props?, opts?)` | `Pug.track(kind, props:, options:)` | Complete |
-| Best-effort `track()` | Never throws | Never throws | Complete |
+| Best-effort public APIs | `track()` never throws | Public SDK calls never throw | Mobile stricter |
 | Identify/profile merge | First identify sends anonymous ID; later calls omit it | Same behavior | Complete |
 | Sessions | Lazy resolve, idle/max expiry, rotate/reset | Same mobile semantics | Complete |
 | Device ID | Used for push identity/linking | Project-scoped device ID, preserved across session rotation | Complete |

@@ -30,8 +30,8 @@ make check        # protos + format + analyze + test
 
 - `Pug.init(projectId, options)` initializes asynchronously with `SharedPreferencesPugStorage` and enhanced mobile auto-properties by default.
 - Persistence is opt-out: provide `storage: MemoryPugStorage()` or another custom `PugStorage` to override the default.
-- `Pug.track(kind, props:, options:)` is best-effort and must never throw.
-- `Pug.identify(externalId, traits:)` reports errors to the caller.
+- All public SDK calls are best-effort and must never throw.
+- `Pug.identify(externalId, traits:)` logs failures and completes normally.
 - `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` manage identity/session/runtime state.
 
 `PugPush` in `lib/src/push.dart` exposes provider-neutral push subscription, unsubscription, and notification event helpers.
@@ -137,8 +137,8 @@ Notification payload sanitization keeps only flat strings, booleans, finite numb
 
 ## Design Invariants
 
-- `track()` must never throw or crash the host app.
-- `init()`, `identify()`, and push registration may report explicit failures.
+- Public SDK APIs must never throw or crash the host app.
+- `init()`, `identify()`, and push registration log failures and complete normally.
 - Repeated init warns and no-ops.
 - Background lifecycle transitions should flush queued events even when `autoTrack` is disabled.
 - `destroy()` starts a best-effort final flush before disposing local runtime resources.

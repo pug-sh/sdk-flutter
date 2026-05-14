@@ -1,7 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
-import 'errors.dart';
+import 'contracts.dart';
 import 'push_models.dart';
 
 typedef FcmTokenGetter = Future<String?> Function();
@@ -13,14 +13,17 @@ class FcmPushProvider implements PushProvider {
     FcmTokenGetter? getToken,
     FcmTokenDeleter? deleteToken,
     TargetPlatform? targetPlatform,
+    PugLogger logger = const DebugPrintPugLogger(),
   }) : _messaging = messaging,
        _getToken = getToken,
        _deleteToken = deleteToken,
+       _logger = SafePugLogger(logger),
        platform = _platformName(targetPlatform ?? defaultTargetPlatform);
 
   final FirebaseMessaging? _messaging;
   final FcmTokenGetter? _getToken;
   final FcmTokenDeleter? _deleteToken;
+  final PugLogger _logger;
 
   @override
   final String platform;
@@ -36,30 +39,45 @@ class FcmPushProvider implements PushProvider {
     bool criticalAlert = false,
     bool provisional = false,
     bool sound = true,
-  }) {
-    return _firebaseMessaging.requestPermission(
-      alert: alert,
-      announcement: announcement,
-      badge: badge,
-      carPlay: carPlay,
-      criticalAlert: criticalAlert,
-      provisional: provisional,
-      sound: sound,
-    );
+  }) async {
+    try {
+      return await _firebaseMessaging.requestPermission(
+        alert: alert,
+        announcement: announcement,
+        badge: badge,
+        carPlay: carPlay,
+        criticalAlert: criticalAlert,
+        provisional: provisional,
+        sound: sound,
+      );
+    } catch (error, stackTrace) {
+      _logger.error(
+        'Pug FCM permission request failed.',
+        error,
+        stackTrace,
+      );
+      return _unavailableNotificationSettings;
+    }
   }
 
   @override
   Future<String> getToken() async {
-    final token = await (_getToken?.call() ?? _firebaseMessaging.getToken());
-    if (token == null || token.isEmpty) {
-      throw const PugException('FCM token is unavailable.');
+    try {
+      final token = await (_getToken?.call() ?? _firebaseMessaging.getToken());
+      return token ?? '';
+    } catch (error, stackTrace) {
+      _logger.error('Pug FCM token lookup failed.', error, stackTrace);
+      return '';
     }
-    return token;
   }
 
   @override
-  Future<void> deleteToken() {
-    return _deleteToken?.call() ?? _firebaseMessaging.deleteToken();
+  Future<void> deleteToken() async {
+    try {
+      await (_deleteToken?.call() ?? _firebaseMessaging.deleteToken());
+    } catch (error, stackTrace) {
+      _logger.error('Pug FCM token delete failed.', error, stackTrace);
+    }
   }
 
   @override
@@ -118,4 +136,19 @@ class FcmPushProvider implements PushProvider {
 
   FirebaseMessaging get _firebaseMessaging =>
       _messaging ?? FirebaseMessaging.instance;
+
+  static const NotificationSettings _unavailableNotificationSettings =
+      NotificationSettings(
+        alert: AppleNotificationSetting.notSupported,
+        announcement: AppleNotificationSetting.notSupported,
+        authorizationStatus: AuthorizationStatus.denied,
+        badge: AppleNotificationSetting.notSupported,
+        carPlay: AppleNotificationSetting.notSupported,
+        criticalAlert: AppleNotificationSetting.notSupported,
+        lockScreen: AppleNotificationSetting.notSupported,
+        notificationCenter: AppleNotificationSetting.notSupported,
+        showPreviews: AppleShowPreviewSetting.notSupported,
+        timeSensitive: AppleNotificationSetting.notSupported,
+        sound: AppleNotificationSetting.notSupported,
+      );
 }

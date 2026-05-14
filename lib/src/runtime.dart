@@ -62,10 +62,13 @@ class PugClient with WidgetsBindingObserver {
   bool _isFlushing = false;
   bool _disposed = false;
   bool _isForeground = false;
+  bool _started = false;
   final Random _sampling = Random();
 
   @visibleForTesting
   PugEventQueue get queue => _queue;
+
+  bool get isStarted => _started;
 
   String get _sessionKey => '__pug_${projectId}_session__';
   String get _profileKey => '__pug_${projectId}_profile__';
@@ -75,22 +78,29 @@ class PugClient with WidgetsBindingObserver {
   String get _campaignKey => '__pug_${projectId}_campaign__';
 
   Future<void> start() async {
-    if (projectId.trim().isEmpty) {
-      throw const PugException('projectId is required.');
+    try {
+      if (projectId.trim().isEmpty) {
+        _options.logger.error('Pug start skipped: projectId is required.');
+        return;
+      }
+      if (_options.apiKey.trim().isEmpty) {
+        _options.logger.error('Pug start skipped: apiKey is required.');
+        return;
+      }
+      _lifecycleBinding?.addObserver(this);
+      _started = true;
+      if (_options.autoCaptureCampaigns) {
+        await _startCampaignCapture();
+      }
+      if (_options.autoTrack &&
+          _lifecycleBinding?.lifecycleState == AppLifecycleState.resumed) {
+        _isForeground = true;
+        track('app_open');
+      }
+      _scheduleFlush();
+    } catch (error, stackTrace) {
+      _options.logger.error('Pug start failed.', error, stackTrace);
     }
-    if (_options.apiKey.trim().isEmpty) {
-      throw const PugException('apiKey is required.');
-    }
-    _lifecycleBinding?.addObserver(this);
-    if (_options.autoCaptureCampaigns) {
-      await _startCampaignCapture();
-    }
-    if (_options.autoTrack &&
-        _lifecycleBinding?.lifecycleState == AppLifecycleState.resumed) {
-      _isForeground = true;
-      track('app_open');
-    }
-    _scheduleFlush();
   }
 
   void track(
@@ -129,27 +139,33 @@ class PugClient with WidgetsBindingObserver {
     String externalId, {
     Map<String, Object?> traits = const {},
   }) async {
-    if (_disposed) {
-      throw const PugException('Pug has been destroyed.');
+    try {
+      if (_disposed) {
+        _options.logger.warn('Pug identify skipped: client is destroyed.');
+        return;
+      }
+      if (externalId.trim().isEmpty) {
+        _options.logger.error('Pug identify skipped: externalId is required.');
+        return;
+      }
+      final profile = _resolveProfile();
+      final sanitizedTraits = PropertyMapper(
+        logger: _options.logger,
+      ).mapProperties(traits);
+      await _transport.identify(
+        IdentifyRequest(
+          projectId: projectId,
+          externalId: externalId,
+          anonymousId: profile.externalId == null ? profile.anonymousId : null,
+          deviceId: _resolveDeviceId(),
+          traits: sanitizedTraits,
+        ),
+      );
+      _storeProfile(profile.copyWith(externalId: externalId));
+      _storage.setString(_externalIdKey, externalId);
+    } catch (error, stackTrace) {
+      _options.logger.error('Pug identify failed.', error, stackTrace);
     }
-    if (externalId.trim().isEmpty) {
-      throw const PugException('externalId is required.');
-    }
-    final profile = _resolveProfile();
-    final sanitizedTraits = PropertyMapper(
-      logger: _options.logger,
-    ).mapProperties(traits);
-    await _transport.identify(
-      IdentifyRequest(
-        projectId: projectId,
-        externalId: externalId,
-        anonymousId: profile.externalId == null ? profile.anonymousId : null,
-        deviceId: _resolveDeviceId(),
-        traits: sanitizedTraits,
-      ),
-    );
-    _storeProfile(profile.copyWith(externalId: externalId));
-    _storage.setString(_externalIdKey, externalId);
   }
 
   void reset() {
@@ -232,27 +248,45 @@ class PugClient with WidgetsBindingObserver {
     PushProvider provider, {
     PushSubscribeOptions options = const PushSubscribeOptions(),
   }) async {
-    final deviceId = _resolveDeviceId();
-    final profile = _resolveProfile();
-    final token = await provider.getToken();
-    final properties = <String, Object?>{
-      ...options.properties,
-      'pushProvider': provider.provider,
-    };
-    await _transport.subscribeDevice(
-      PushSubscription(
-        provider: provider.provider,
-        platform: provider.platform,
-        token: token,
-        deviceId: deviceId,
-        profileExternalId: options.profileExternalId ?? profile.externalId,
-        profileId: options.profileId,
-        properties: properties,
-      ),
-    );
+    try {
+      if (_disposed) {
+        _options.logger.warn('Pug push subscribe skipped: client is destroyed.');
+        return;
+      }
+      final deviceId = _resolveDeviceId();
+      final profile = _resolveProfile();
+      final token = await provider.getToken();
+      if (token.trim().isEmpty) {
+        _options.logger.warn('Pug push subscribe skipped: token unavailable.');
+        return;
+      }
+      final properties = <String, Object?>{
+        ...options.properties,
+        'pushProvider': provider.provider,
+      };
+      await _transport.subscribeDevice(
+        PushSubscription(
+          provider: provider.provider,
+          platform: provider.platform,
+          token: token,
+          deviceId: deviceId,
+          profileExternalId: options.profileExternalId ?? profile.externalId,
+          profileId: options.profileId,
+          properties: properties,
+        ),
+      );
+    } catch (error, stackTrace) {
+      _options.logger.error('Pug push subscribe failed.', error, stackTrace);
+    }
   }
 
-  Future<void> unsubscribePush(PushProvider provider) => provider.deleteToken();
+  Future<void> unsubscribePush(PushProvider provider) async {
+    try {
+      await provider.deleteToken();
+    } catch (error, stackTrace) {
+      _options.logger.error('Pug push unsubscribe failed.', error, stackTrace);
+    }
+  }
 
   void trackNotificationOpened(Map<Object?, Object?> data) {
     final props = sanitizeNotificationData(data);
@@ -315,7 +349,12 @@ class PugClient with WidgetsBindingObserver {
         _queue.push(event);
         _scheduleFlush(withBackoff: true);
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _options.logger.warn(
+        'Pug immediate event send failed; event will be retried.',
+      );
+      _options.logger.debug(error.toString());
+      _options.logger.debug(stackTrace.toString());
       _queue.push(event);
       _scheduleFlush(withBackoff: true);
     }
@@ -358,8 +397,8 @@ class PugClient with WidgetsBindingObserver {
     final now = _clock.nowMillis();
     final deviceId = _resolveDeviceId();
     final stored = _storage.getString(_sessionKey);
-    final decoded = stored == null ? null : _tryDecode(stored);
-    final current = decoded == null ? null : SessionState.fromJson(decoded);
+    final decoded = stored == null ? null : _tryDecode(stored, _options.logger);
+    final current = decoded == null ? null : _trySessionFromJson(decoded);
     if (current == null) {
       final created = SessionState(
         sessionId: _ids.nextId(),
@@ -406,8 +445,8 @@ class PugClient with WidgetsBindingObserver {
 
   ProfileState _resolveProfile() {
     final stored = _storage.getString(_profileKey);
-    final decoded = stored == null ? null : _tryDecode(stored);
-    final current = decoded == null ? null : ProfileState.fromJson(decoded);
+    final decoded = stored == null ? null : _tryDecode(stored, _options.logger);
+    final current = decoded == null ? null : _tryProfileFromJson(decoded);
     if (current != null) {
       return current;
     }
@@ -425,6 +464,28 @@ class PugClient with WidgetsBindingObserver {
 
   void _storeProfile(ProfileState profile) {
     _storage.setString(_profileKey, jsonEncode(profile.toJson()));
+  }
+
+  SessionState? _trySessionFromJson(Map<String, Object?> json) {
+    try {
+      return SessionState.fromJson(json);
+    } catch (error, stackTrace) {
+      _options.logger.warn('Pug stored session state could not be decoded.');
+      _options.logger.debug(error.toString());
+      _options.logger.debug(stackTrace.toString());
+      return null;
+    }
+  }
+
+  ProfileState? _tryProfileFromJson(Map<String, Object?> json) {
+    try {
+      return ProfileState.fromJson(json);
+    } catch (error, stackTrace) {
+      _options.logger.warn('Pug stored profile state could not be decoded.');
+      _options.logger.debug(error.toString());
+      _options.logger.debug(stackTrace.toString());
+      return null;
+    }
   }
 
   bool _sampledIn() {
@@ -449,19 +510,27 @@ class PugClient with WidgetsBindingObserver {
       if (initial != null) {
         _captureCampaign(initial);
       }
-    } catch (error) {
+    } catch (error, stackTrace) {
       _options.logger.warn('Pug could not read initial campaign link.');
+      _options.logger.debug(error.toString());
+      _options.logger.debug(stackTrace.toString());
     }
 
     try {
       _linkSubscription = provider.uriStream.listen(
         _captureCampaign,
-        onError: (_) {
+        onError: (Object error, StackTrace? stackTrace) {
           _options.logger.warn('Pug campaign link stream failed.');
+          _options.logger.debug(error.toString());
+          if (stackTrace != null) {
+            _options.logger.debug(stackTrace.toString());
+          }
         },
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       _options.logger.warn('Pug could not listen for campaign links.');
+      _options.logger.debug(error.toString());
+      _options.logger.debug(stackTrace.toString());
     }
   }
 
@@ -475,7 +544,7 @@ class PugClient with WidgetsBindingObserver {
 
   Map<String, Object?> _storedCampaignProperties() {
     final raw = _storage.getString(_campaignKey);
-    final decoded = raw == null ? null : _tryDecode(raw);
+    final decoded = raw == null ? null : _tryDecode(raw, _options.logger);
     if (decoded == null) {
       return const {};
     }
@@ -501,9 +570,10 @@ class PugClient with WidgetsBindingObserver {
 }
 
 PugOptions _normalizeOptions(PugOptions options) {
+  final logger = SafePugLogger(options.logger);
   final samplingRate = options.samplingRate.clamp(0.0, 1.0);
   if (samplingRate != options.samplingRate) {
-    options.logger.warn('samplingRate must be between 0 and 1; clamping.');
+    logger.warn('samplingRate must be between 0 and 1; clamping.');
   }
   return PugOptions(
     apiKey: options.apiKey,
@@ -518,7 +588,7 @@ PugOptions _normalizeOptions(PugOptions options) {
     autoTrack: options.autoTrack,
     dryRun: options.dryRun,
     autoCaptureCampaigns: options.autoCaptureCampaigns,
-    logger: options.logger,
+    logger: logger,
     storage: options.storage,
     transport: options.transport,
     autoPropertyProvider: options.autoPropertyProvider,
@@ -526,7 +596,7 @@ PugOptions _normalizeOptions(PugOptions options) {
   );
 }
 
-Map<String, Object?>? _tryDecode(String raw) {
+Map<String, Object?>? _tryDecode(String raw, PugLogger logger) {
   try {
     final decoded = jsonDecode(raw);
     if (decoded is! Map<Object?, Object?>) {
@@ -540,7 +610,10 @@ Map<String, Object?>? _tryDecode(String raw) {
       }
     }
     return typed;
-  } catch (_) {
+  } catch (error, stackTrace) {
+    logger.warn('Pug stored JSON could not be decoded.');
+    logger.debug(error.toString());
+    logger.debug(stackTrace.toString());
     return null;
   }
 }

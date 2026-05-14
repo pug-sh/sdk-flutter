@@ -13,10 +13,19 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('init validates required values and repeated init is ignored', () async {
+    final invalidLogger = CapturingLogger();
     await expectLater(
-      Pug.init('', const PugOptions(apiKey: 'key')),
-      throwsA(isA<PugException>()),
+      Pug.init(
+        '',
+        PugOptions(
+          apiKey: 'key',
+          logger: invalidLogger,
+          autoTrack: false,
+        ),
+      ),
+      completes,
     );
+    expect(invalidLogger.errors, contains(contains('projectId is required')));
 
     final transport = FakeTransport();
     final logger = CapturingLogger();
@@ -93,6 +102,45 @@ void main() {
     expect(event.customProperties['date']?.kind, 'timestampValue');
     expect(event.customProperties['json']?.kind, 'stringValue');
     expect(event.customProperties.containsKey('none'), isFalse);
+  });
+
+  test('identify never throws for invalid state or transport failures', () async {
+    await expectLater(Pug.identify('user-before-init'), completes);
+
+    final logger = CapturingLogger();
+    final failedTransport = FakeTransport()
+      ..identifyError = const PugTransportException('identify failed');
+    final client = testClient(transport: failedTransport, logger: logger);
+
+    await expectLater(client.identify(''), completes);
+    await expectLater(client.identify('user-1'), completes);
+
+    expect(logger.errors, contains(contains('externalId is required')));
+    expect(logger.errors, contains(contains('Pug identify failed')));
+  });
+
+  test('public calls never throw when logger throws', () async {
+    await expectLater(
+      Pug.init(
+        '',
+        const PugOptions(
+          apiKey: 'key',
+          logger: ThrowingLogger(),
+          autoTrack: false,
+        ),
+      ),
+      completes,
+    );
+
+    final client = testClient(
+      logger: const ThrowingLogger(),
+      autoCaptureCampaigns: false,
+    );
+    await expectLater(client.identify(''), completes);
+    expect(
+      () => client.track('purchase', props: {'bad': double.nan}),
+      returnsNormally,
+    );
   });
 
   test('auto property provider contributes mobile metadata', () {
@@ -420,7 +468,26 @@ void main() {
   test('FCM provider reports unavailable tokens', () async {
     final provider = FcmPushProvider(getToken: () async => null);
 
-    await expectLater(provider.getToken(), throwsA(isA<PugException>()));
+    await expectLater(provider.getToken(), completion(''));
+  });
+
+  test('push subscribe and unsubscribe never throw', () async {
+    await expectLater(PugPush.subscribe(FakePushProvider()), completes);
+    await expectLater(PugPush.unsubscribe(FakePushProvider()), completes);
+
+    final logger = CapturingLogger();
+    final client = testClient(logger: logger);
+    await expectLater(
+      client.subscribePush(FakePushProvider(token: '')),
+      completes,
+    );
+    await expectLater(
+      client.unsubscribePush(FakePushProvider(deleteError: StateError('bad'))),
+      completes,
+    );
+
+    expect(logger.warnings, contains(contains('token unavailable')));
+    expect(logger.errors, contains(contains('Pug push unsubscribe failed')));
   });
 
   test(
@@ -475,7 +542,7 @@ PugClient testClient({
     idGenerator: ids ?? SequenceIds(),
     lifecycleBinding: lifecycleBinding,
   );
-  client.start();
+  unawaited(client.start());
   addTearDown(client.destroy);
   return client;
 }
@@ -518,6 +585,7 @@ class FakeTransport implements PugTransport {
   final List<IdentifyRequest> identifies = <IdentifyRequest>[];
   final List<PushSubscription> subscriptions = <PushSubscription>[];
   PugTransportException? batchError;
+  PugTransportException? identifyError;
 
   @override
   Future<void> send(Event event) async {
@@ -534,6 +602,9 @@ class FakeTransport implements PugTransport {
 
   @override
   Future<void> identify(IdentifyRequest request) async {
+    if (identifyError != null) {
+      throw identifyError!;
+    }
     identifies.add(request);
   }
 
@@ -580,6 +651,25 @@ class CapturingLogger implements PugLogger {
   }
 }
 
+class ThrowingLogger implements PugLogger {
+  const ThrowingLogger();
+
+  @override
+  void debug(String message) {
+    throw StateError('debug failed');
+  }
+
+  @override
+  void error(String message, [Object? error, StackTrace? stackTrace]) {
+    throw StateError('error failed');
+  }
+
+  @override
+  void warn(String message) {
+    throw StateError('warn failed');
+  }
+}
+
 class FakeLinkProvider implements PugLinkProvider {
   FakeLinkProvider({this.initial});
 
@@ -603,6 +693,11 @@ class FakeLinkProvider implements PugLinkProvider {
 }
 
 class FakePushProvider implements PushProvider {
+  FakePushProvider({this.token = 'token-1', this.deleteError});
+
+  final String token;
+  final Object? deleteError;
+
   @override
   String get platform => 'android';
 
@@ -610,10 +705,15 @@ class FakePushProvider implements PushProvider {
   String get provider => 'fake';
 
   @override
-  Future<void> deleteToken() async {}
+  Future<void> deleteToken() async {
+    final error = deleteError;
+    if (error != null) {
+      throw error;
+    }
+  }
 
   @override
-  Future<String> getToken() async => 'token-1';
+  Future<String> getToken() async => token;
 
   @override
   Map<Object?, Object?> notificationData(Object source) => const {};

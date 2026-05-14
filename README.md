@@ -86,7 +86,7 @@ await Pug.init(
 
 `Pug.init(...)` uses shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type by default. To opt out of persistence, provide `storage: MemoryPugStorage()` or another custom `PugStorage`.
 
-Repeated init calls are ignored with a warning. `track()` is best-effort and does not throw.
+All public SDK calls are best-effort and do not throw. Invalid calls and runtime failures are reported through the configured logger when one is available. Repeated init calls are ignored with a warning.
 
 When `autoTrack` is enabled, the SDK tracks `app_open` when the app is already
 resumed at init or later enters foreground. It tracks `app_close` when the app
