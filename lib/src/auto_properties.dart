@@ -1,5 +1,3 @@
-// ignore_for_file: avoid_dynamic_calls
-
 import 'dart:async';
 import 'dart:io';
 
@@ -86,7 +84,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       return const {};
     }
     if (Platform.isAndroid) {
-      final dynamic info = await plugin.androidInfo;
+      final info = await plugin.androidInfo;
       return {
         r'$deviceManufacturer': _readString(info, 'manufacturer'),
         r'$deviceModel': _readString(info, 'model'),
@@ -94,7 +92,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       };
     }
     if (Platform.isIOS) {
-      final dynamic info = await plugin.iosInfo;
+      final info = await plugin.iosInfo;
       final modelName = _readString(info, 'modelName');
       return {
         r'$deviceManufacturer': 'Apple',
@@ -104,7 +102,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       };
     }
     if (Platform.isMacOS) {
-      final dynamic info = await plugin.macOsInfo;
+      final info = await plugin.macOsInfo;
       final modelName = _readString(info, 'modelName');
       return {
         r'$deviceManufacturer': 'Apple',
@@ -114,14 +112,14 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       };
     }
     if (Platform.isLinux) {
-      final dynamic info = await plugin.linuxInfo;
+      final info = await plugin.linuxInfo;
       return {
         r'$deviceManufacturer': _readString(info, 'prettyName'),
         r'$deviceModel': _readString(info, 'name'),
       };
     }
     if (Platform.isWindows) {
-      final dynamic info = await plugin.windowsInfo;
+      final info = await plugin.windowsInfo;
       return {
         r'$deviceManufacturer': _readString(info, 'computerName'),
         r'$deviceModel': _readString(info, 'productName'),
@@ -147,23 +145,8 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     };
   }
 
-  static String _readString(Object? value, String name) {
-    try {
-      final dynamic dynamicValue = value;
-      final Object? field = switch (name) {
-        'manufacturer' => dynamicValue.manufacturer,
-        'model' => dynamicValue.model,
-        'name' => dynamicValue.name,
-        'modelName' => dynamicValue.modelName,
-        'prettyName' => dynamicValue.prettyName,
-        'computerName' => dynamicValue.computerName,
-        'productName' => dynamicValue.productName,
-        _ => null,
-      };
-      return field?.toString() ?? '';
-    } catch (_) {
-      return '';
-    }
+  static String _readString(BaseDeviceInfo info, String name) {
+    return info.data[name]?.toString() ?? '';
   }
 
   static String _networkType(Object results) {
