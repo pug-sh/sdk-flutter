@@ -391,6 +391,12 @@ class PugClient with WidgetsBindingObserver {
     unawaited(_linkSubscription?.cancel());
     _linkProvider?.dispose();
     _lifecycleBinding?.removeObserver(this);
+    _storage.remove(_sessionKey);
+    _storage.remove(_profileKey);
+    _storage.remove(_deviceKey);
+    _storage.remove(_externalIdKey);
+    _storage.remove(_campaignKey);
+    _storage.remove(_queueKey);
     _currentRoute = null;
     _previousRoute = null;
     _disposed = true;
