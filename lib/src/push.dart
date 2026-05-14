@@ -7,9 +7,7 @@ export 'push_models.dart';
 class PugPush {
   PugPush._();
 
-  static const PugLogger _fallbackLogger = SafePugLogger(
-    DebugPrintPugLogger(),
-  );
+  static const PugLogger _fallbackLogger = SafePugLogger(DebugPrintPugLogger());
 
   static Future<void> subscribe(
     PushProvider provider, {

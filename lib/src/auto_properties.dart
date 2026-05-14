@@ -53,7 +53,8 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     }
 
     try {
-      final results = await (connectivity ?? Connectivity()).checkConnectivity();
+      final results =
+          await (connectivity ?? Connectivity()).checkConnectivity();
       properties[r'$networkType'] = _networkType(results);
     } catch (error) {
       logger?.warn('Pug could not read connectivity info for auto properties.');
@@ -96,9 +97,8 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       final modelName = _readString(info, 'modelName');
       return {
         r'$deviceManufacturer': 'Apple',
-        r'$deviceModel': modelName.isNotEmpty
-            ? modelName
-            : _readString(info, 'model'),
+        r'$deviceModel':
+            modelName.isNotEmpty ? modelName : _readString(info, 'model'),
       };
     }
     if (Platform.isMacOS) {
@@ -106,9 +106,8 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       final modelName = _readString(info, 'modelName');
       return {
         r'$deviceManufacturer': 'Apple',
-        r'$deviceModel': modelName.isNotEmpty
-            ? modelName
-            : _readString(info, 'model'),
+        r'$deviceModel':
+            modelName.isNotEmpty ? modelName : _readString(info, 'model'),
       };
     }
     if (Platform.isLinux) {
@@ -150,11 +149,12 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
   }
 
   static String _networkType(Object results) {
-    final values = results is Iterable<ConnectivityResult>
-        ? results
-        : results is ConnectivityResult
-        ? <ConnectivityResult>[results]
-        : const <ConnectivityResult>[];
+    final values =
+        results is Iterable<ConnectivityResult>
+            ? results
+            : results is ConnectivityResult
+            ? <ConnectivityResult>[results]
+            : const <ConnectivityResult>[];
     final names = values.map((value) => value.name).toSet();
     if (names.contains('none')) {
       return 'none';

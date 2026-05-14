@@ -51,11 +51,7 @@ class FcmPushProvider implements PushProvider {
         sound: sound,
       );
     } catch (error, stackTrace) {
-      _logger.error(
-        'Pug FCM permission request failed.',
-        error,
-        stackTrace,
-      );
+      _logger.error('Pug FCM permission request failed.', error, stackTrace);
       return _unavailableNotificationSettings;
     }
   }

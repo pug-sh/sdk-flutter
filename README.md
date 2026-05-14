@@ -92,6 +92,22 @@ When `autoTrack` is enabled, the SDK tracks `app_open` when the app is already
 resumed at init or later enters foreground. It tracks `app_close` when the app
 leaves foreground.
 
+When `autoPageViews` is enabled (default), the SDK tracks `page_view` events when
+the user navigates between routes. To enable this feature, host apps must register
+the route observer with their Navigator:
+
+```dart
+// In your MaterialApp/Navigator setup
+MaterialApp(
+  navigatorObservers: [
+    PugRouteObserver(),
+  ],
+  // ...
+)
+```
+
+Each `page_view` event includes `url` (the route name) and `referrer` (the previous route).
+
 Campaign capture is enabled by default. When the app receives an app link or
 deep link containing UTM-style query parameters, Pug stores the latest campaign
 context and attaches it to later events as auto-properties:

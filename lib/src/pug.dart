@@ -10,9 +10,7 @@ class Pug {
   Pug._();
 
   static final Pug _shared = Pug._();
-  static const PugLogger _fallbackLogger = SafePugLogger(
-    DebugPrintPugLogger(),
-  );
+  static const PugLogger _fallbackLogger = SafePugLogger(DebugPrintPugLogger());
 
   static Pug get shared => _shared;
 
@@ -73,6 +71,7 @@ class Pug {
         options: resolvedOptions,
         lifecycleBinding: WidgetsBinding.instance,
       );
+      PugClient.onRouteChanged = client.notifyRouteChanged;
       await client.start();
       if (client.isStarted) {
         _client = client;
