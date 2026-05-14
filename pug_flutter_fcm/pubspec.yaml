@@ -2,6 +2,7 @@ name: pug_flutter_fcm
 description: "FCM Push Provider for Pug Flutter SDK."
 version: 0.0.1
 homepage:
+publish_to: 'none'
 
 environment:
   sdk: ">=3.7.0 <4.0.0"
