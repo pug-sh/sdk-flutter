@@ -24,6 +24,32 @@ class PugOptions {
   final PugLogger logger;
   final PugStorage? storage;
   final PugTransport? transport;
+
+  PugOptions copyWith({
+    String? apiKey,
+    String? endpoint,
+    double? samplingRate,
+    BatchConfig? batch,
+    SessionConfig? session,
+    bool? autoTrack,
+    bool? dryRun,
+    PugLogger? logger,
+    PugStorage? storage,
+    PugTransport? transport,
+  }) {
+    return PugOptions(
+      apiKey: apiKey ?? this.apiKey,
+      endpoint: endpoint ?? this.endpoint,
+      samplingRate: samplingRate ?? this.samplingRate,
+      batch: batch ?? this.batch,
+      session: session ?? this.session,
+      autoTrack: autoTrack ?? this.autoTrack,
+      dryRun: dryRun ?? this.dryRun,
+      logger: logger ?? this.logger,
+      storage: storage ?? this.storage,
+      transport: transport ?? this.transport,
+    );
+  }
 }
 
 class BatchConfig {

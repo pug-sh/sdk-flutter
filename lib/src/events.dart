@@ -114,6 +114,38 @@ class PropertyMapper {
     return mapped;
   }
 
+  Map<String, PropertyValue>? mapEventProperties(
+    String kind,
+    Map<String, Object?> properties,
+  ) {
+    final schema = wellKnownEventSchemas[kind];
+    if (schema == null) {
+      return mapProperties(properties);
+    }
+
+    final mapped = <String, PropertyValue>{};
+    for (final entry in properties.entries) {
+      final field = schema.fields[entry.key];
+      if (field == null) {
+        final value = _mapValue(entry.value);
+        if (value != null) {
+          mapped[entry.key] = value;
+        }
+        continue;
+      }
+
+      final value = _mapKnownValue(entry.value, field);
+      if (value == null) {
+        logger.error(
+          'Pug dropped "$kind": property "${entry.key}" must be ${field.type.description}.',
+        );
+        return null;
+      }
+      mapped[entry.key] = value;
+    }
+    return mapped;
+  }
+
   PropertyValue? _mapValue(Object? value) {
     if (value == null) {
       return null;
@@ -154,6 +186,26 @@ class PropertyMapper {
     }
   }
 
+  PropertyValue? _mapKnownValue(Object? value, WellKnownPropertyField field) {
+    if (value == null) {
+      return null;
+    }
+    return switch (field.type) {
+      WellKnownPropertyType.string =>
+        value is String
+            ? PropertyValue.string(_truncateUtf8(value, 1024))
+            : null,
+      WellKnownPropertyType.int32 =>
+        value is int ? PropertyValue.int(value) : null,
+      WellKnownPropertyType.double =>
+        value is num && value.isFinite
+            ? PropertyValue.double(value.toDouble())
+            : null,
+      WellKnownPropertyType.bool =>
+        value is bool ? PropertyValue.bool(value) : null,
+    };
+  }
+
   PropertyValue? _dropUnsupported(Object value) {
     logger.warn(
       'Pug dropped unsupported property value of type ${value.runtimeType}.',
@@ -169,6 +221,115 @@ class PropertyMapper {
     return utf8.decode(bytes.take(maxBytes).toList(), allowMalformed: true);
   }
 }
+
+enum WellKnownPropertyType {
+  string('a string'),
+  int32('an integer'),
+  double('a finite number'),
+  bool('a boolean');
+
+  const WellKnownPropertyType(this.description);
+
+  final String description;
+}
+
+class WellKnownPropertyField {
+  const WellKnownPropertyField(this.type);
+
+  final WellKnownPropertyType type;
+}
+
+class WellKnownEventSchema {
+  const WellKnownEventSchema(this.fields);
+
+  final Map<String, WellKnownPropertyField> fields;
+}
+
+const _stringField = WellKnownPropertyField(WellKnownPropertyType.string);
+const _intField = WellKnownPropertyField(WellKnownPropertyType.int32);
+const _doubleField = WellKnownPropertyField(WellKnownPropertyType.double);
+
+const wellKnownEventSchemas = <String, WellKnownEventSchema>{
+  'page_view': WellKnownEventSchema({}),
+  'click': WellKnownEventSchema({
+    'class': _stringField,
+    'id': _stringField,
+    'tag': _stringField,
+    'text': _stringField,
+    'x': _intField,
+    'y': _intField,
+  }),
+  'rage_click': WellKnownEventSchema({
+    'clickCount': _intField,
+    'element': _stringField,
+    'x': _intField,
+    'y': _intField,
+  }),
+  'dead_click': WellKnownEventSchema({
+    'element': _stringField,
+    'text': _stringField,
+    'x': _intField,
+    'y': _intField,
+  }),
+  'scroll': WellKnownEventSchema({'percent': _intField, 'scrollY': _intField}),
+  'search': WellKnownEventSchema({'query': _stringField}),
+  'add_to_cart': WellKnownEventSchema({
+    'productId': _stringField,
+    'amount': _doubleField,
+    'currency': _stringField,
+  }),
+  'checkout_started': WellKnownEventSchema({
+    'productId': _stringField,
+    'amount': _doubleField,
+    'currency': _stringField,
+  }),
+  'checkout_completed': WellKnownEventSchema({
+    'productId': _stringField,
+    'amount': _doubleField,
+    'currency': _stringField,
+  }),
+  'purchase': WellKnownEventSchema({
+    'productId': _stringField,
+    'amount': _doubleField,
+    'currency': _stringField,
+  }),
+  'form_start': WellKnownEventSchema({
+    'formId': _stringField,
+    'formName': _stringField,
+  }),
+  'form_submit': WellKnownEventSchema({
+    'action': _stringField,
+    'formId': _stringField,
+    'formName': _stringField,
+  }),
+  'signup': WellKnownEventSchema({}),
+  'login': WellKnownEventSchema({}),
+  'logout': WellKnownEventSchema({}),
+  'app_open': WellKnownEventSchema({}),
+  'app_close': WellKnownEventSchema({}),
+  'notification_received': WellKnownEventSchema({
+    'campaignId': _stringField,
+    'notificationType': _stringField,
+  }),
+  'notification_clicked': WellKnownEventSchema({
+    'campaignId': _stringField,
+    'notificationType': _stringField,
+  }),
+  'notification_dismissed': WellKnownEventSchema({
+    'campaignId': _stringField,
+    'notificationType': _stringField,
+  }),
+  'video_play': WellKnownEventSchema({
+    'videoId': _stringField,
+    'positionS': _intField,
+  }),
+  'video_pause': WellKnownEventSchema({
+    'videoId': _stringField,
+    'positionS': _intField,
+  }),
+  'error_occurred': WellKnownEventSchema({'errorCode': _stringField}),
+  'share': WellKnownEventSchema({}),
+};
 
 class IdentifyRequest {
   const IdentifyRequest({

@@ -22,10 +22,14 @@ class PugEventQueue {
   final List<Event> _unlocked = <Event>[];
   List<Event> _locked = <Event>[];
 
-  int get size => _unlocked.length + _locked.length;
+  int get size => _unlocked.length;
 
   void push(Event event) {
-    if (_unlocked.length >= maxQueueSize) {
+    if (_unlocked.length + _locked.length >= maxQueueSize) {
+      if (_unlocked.isEmpty) {
+        _logger.warn('Pug queue is full during flush; dropped new event.');
+        return;
+      }
       _unlocked.removeAt(0);
       _logger.warn('Pug queue is full; dropped oldest event.');
     }
@@ -35,7 +39,7 @@ class PugEventQueue {
 
   List<Event> lock(int limit) {
     if (_locked.isNotEmpty) {
-      return List<Event>.unmodifiable(_locked);
+      return const [];
     }
     final count = min(limit, _unlocked.length);
     _locked = _unlocked.take(count).toList();

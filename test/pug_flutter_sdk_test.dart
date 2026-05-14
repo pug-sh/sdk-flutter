@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
 import 'package:pug_flutter_sdk/src/event_queue_storage.dart';
 import 'package:pug_flutter_sdk/src/runtime.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +42,25 @@ void main() {
     Pug.destroy();
   });
 
+  test('initPersistent uses shared preferences storage by default', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+
+    await Pug.initPersistent(
+      'project',
+      PugOptions(
+        apiKey: 'key',
+        transport: FakeTransport(),
+        autoTrack: false,
+        batch: const BatchConfig(maxWaitMs: 60000),
+      ),
+    );
+    Pug.track(PugEventNames.signup);
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('__pug_project_queue__'), contains('signup'));
+    Pug.destroy();
+  });
+
   test('track never throws and maps properties', () {
     final transport = FakeTransport();
     final client = testClient(transport: transport);
@@ -70,6 +90,42 @@ void main() {
     expect(event.customProperties['date']?.kind, 'timestampValue');
     expect(event.customProperties['json']?.kind, 'stringValue');
     expect(event.customProperties.containsKey('none'), isFalse);
+  });
+
+  test('well-known events validate known props and preserve schema types', () {
+    final logger = CapturingLogger();
+    final client = testClient(logger: logger);
+
+    client.track(
+      'purchase',
+      props: {
+        'productId': 'sku-1',
+        'amount': 3,
+        'currency': 'USD',
+        'extra': true,
+      },
+    );
+    final purchase = client.queue.peekUnlocked().single;
+    expect(purchase.customProperties['productId']?.kind, 'stringValue');
+    expect(purchase.customProperties['amount']?.kind, 'doubleValue');
+    expect(purchase.customProperties['amount']?.value, 3.0);
+    expect(purchase.customProperties['extra']?.kind, 'boolValue');
+
+    client.track('purchase', props: {'amount': '3.00'});
+    expect(client.queue.peekUnlocked().length, 1);
+    expect(logger.errors, contains(contains('property "amount" must be')));
+
+    client.track('scroll', props: {'percent': 0, 'scrollY': 0});
+    final scroll = client.queue.peekUnlocked().last;
+    expect(scroll.customProperties['percent']?.value, 0);
+    expect(scroll.customProperties['scrollY']?.value, 0);
+  });
+
+  test('public well-known event names match runtime schemas', () {
+    expect(PugEventNames.all.length, wellKnownEventSchemas.length);
+    expect(PugEventNames.all.toSet(), wellKnownEventSchemas.keys.toSet());
+    expect(PugEventNames.isWellKnown(PugEventNames.purchase), isTrue);
+    expect(PugEventNames.isWellKnown('custom_event'), isFalse);
   });
 
   test('string properties are truncated to 1024 UTF-8 bytes', () {
@@ -134,14 +190,33 @@ void main() {
 
     final locked = queue.lock(1);
     expect(locked.single.kind, 'one');
+    expect(queue.size, 1);
     expect(queue.peekUnlocked().single.kind, 'two');
+    expect(queue.lock(1), isEmpty);
 
     queue.rollback();
+    expect(queue.size, 2);
     expect(queue.peekUnlocked().map((event) => event.kind), ['one', 'two']);
 
     queue.lock(1);
     queue.commit();
     expect(queue.peekUnlocked().single.kind, 'two');
+  });
+
+  test('queue drops new events when full and all events are locked', () {
+    final logger = CapturingLogger();
+    final queue = PugEventQueue(
+      key: 'queue',
+      storage: MemoryPugStorage(),
+      logger: logger,
+      maxQueueSize: 1,
+    );
+    queue.push(fakeEvent('one'));
+    expect(queue.lock(1).single.kind, 'one');
+
+    queue.push(fakeEvent('two'));
+    expect(queue.peekUnlocked(), isEmpty);
+    expect(logger.warnings, contains(contains('full during flush')));
   });
 
   test(
@@ -250,6 +325,7 @@ PugClient testClient({
   FakeClock? clock,
   SequenceIds? ids,
   MemoryPugStorage? storage,
+  PugLogger? logger,
 }) {
   final client = PugClient(
     projectId: 'project',
@@ -257,6 +333,7 @@ PugClient testClient({
       apiKey: 'key',
       transport: transport ?? FakeTransport(),
       storage: storage ?? MemoryPugStorage(),
+      logger: logger ?? const NoopPugLogger(),
       autoTrack: false,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),
@@ -349,12 +426,15 @@ class SequenceIds implements PugIdGenerator {
 
 class CapturingLogger implements PugLogger {
   final List<String> warnings = <String>[];
+  final List<String> errors = <String>[];
 
   @override
   void debug(String message) {}
 
   @override
-  void error(String message, [Object? error, StackTrace? stackTrace]) {}
+  void error(String message, [Object? error, StackTrace? stackTrace]) {
+    errors.add(message);
+  }
 
   @override
   void warn(String message) {

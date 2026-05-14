@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'configuration.dart';
 import 'errors.dart';
 import 'runtime.dart';
+import 'shared_preferences_storage.dart';
 
 class Pug {
   Pug._();
@@ -17,6 +18,13 @@ class Pug {
 
   static void init(String projectId, PugOptions options) {
     _shared.initialize(projectId, options);
+  }
+
+  static Future<void> initPersistent(
+    String projectId,
+    PugOptions options,
+  ) async {
+    await _shared.initializePersistent(projectId, options);
   }
 
   static void track(
@@ -58,6 +66,15 @@ class Pug {
     );
     client.start();
     _client = client;
+  }
+
+  Future<void> initializePersistent(
+    String projectId,
+    PugOptions options,
+  ) async {
+    final storage =
+        options.storage ?? await SharedPreferencesPugStorage.create();
+    initialize(projectId, options.copyWith(storage: storage));
   }
 
   void capture(

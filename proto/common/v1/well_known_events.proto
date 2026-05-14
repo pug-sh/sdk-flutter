@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package common.v1;
+
+// kind: "page_view"
+message PageViewProperties {}
+
+// kind: "click"
+message ClickProperties {
+  optional string class = 1;
+  optional string id = 2;
+  optional string tag = 3;
+  optional string text = 4;
+  optional int32 x = 5;
+  optional int32 y = 6;
+}
+
+// kind: "rage_click"
+message RageClickProperties {
+  optional int32 click_count = 1;
+  optional string element = 2;
+  optional int32 x = 3;
+  optional int32 y = 4;
+}
+
+// kind: "dead_click"
+message DeadClickProperties {
+  optional string element = 1;
+  optional string text = 2;
+  optional int32 x = 3;
+  optional int32 y = 4;
+}
+
+// kind: "scroll"
+message ScrollProperties {
+  optional int32 percent = 1;
+  optional int32 scroll_y = 2;
+}
+
+// kind: "search"
+message SearchProperties {
+  optional string query = 1;
+}
+
+// kind: "add_to_cart"
+message AddToCartProperties {
+  optional string product_id = 1;
+  optional double amount = 2;
+  optional string currency = 3;
+}
+
+// kind: "checkout_started"
+message CheckoutStartedProperties {
+  optional string product_id = 1;
+  optional double amount = 2;
+  optional string currency = 3;
+}
+
+// kind: "checkout_completed"
+message CheckoutCompletedProperties {
+  optional string product_id = 1;
+  optional double amount = 2;
+  optional string currency = 3;
+}
+
+// kind: "purchase"
+message PurchaseProperties {
+  optional string product_id = 1;
+  optional double amount = 2;
+  optional string currency = 3;
+}
+
+// kind: "form_start"
+message FormStartProperties {
+  optional string form_id = 1;
+  optional string form_name = 2;
+}
+
+// kind: "form_submit"
+message FormSubmitProperties {
+  optional string action = 1;
+  optional string form_id = 2;
+  optional string form_name = 3;
+}
+
+// kind: "signup"
+message SignupProperties {}
+
+// kind: "login"
+message LoginProperties {}
+
+// kind: "logout"
+message LogoutProperties {}
+
+// kind: "app_open"
+message AppOpenProperties {}
+
+// kind: "app_close"
+message AppCloseProperties {}
+
+// kind: "notification_received"
+message NotificationReceivedProperties {
+  optional string campaign_id = 1;
+  optional string notification_type = 2;
+}
+
+// kind: "notification_clicked"
+message NotificationClickedProperties {
+  optional string campaign_id = 1;
+  optional string notification_type = 2;
+}
+
+// kind: "notification_dismissed"
+message NotificationDismissedProperties {
+  optional string campaign_id = 1;
+  optional string notification_type = 2;
+}
+
+// kind: "video_play"
+message VideoPlayProperties {
+  optional string video_id = 1;
+  optional int32 position_s = 2;
+}
+
+// kind: "video_pause"
+message VideoPauseProperties {
+  optional string video_id = 1;
+  optional int32 position_s = 2;
+}
+
+// kind: "error_occurred"
+message ErrorOccurredProperties {
+  optional string error_code = 1;
+}
+
+// kind: "share"
+message ShareProperties {}

@@ -88,6 +88,9 @@ class PugClient with WidgetsBindingObserver {
         return;
       }
       final event = _createEvent(kind, props, options.timestampMillis);
+      if (event == null) {
+        return;
+      }
       if (_options.dryRun) {
         _options.logger.debug('Pug dry run: event ${event.kind} accepted.');
         return;
@@ -292,7 +295,7 @@ class PugClient with WidgetsBindingObserver {
     }
   }
 
-  Event _createEvent(
+  Event? _createEvent(
     String kind,
     Map<String, Object?> props,
     int? timestampMillis,
@@ -300,7 +303,10 @@ class PugClient with WidgetsBindingObserver {
     final session = _resolveSession();
     final profile = _resolveProfile();
     final mapper = PropertyMapper(logger: _options.logger);
-    final customProperties = mapper.mapProperties(props);
+    final customProperties = mapper.mapEventProperties(kind, props);
+    if (customProperties == null) {
+      return null;
+    }
     final autoProperties = mapper.mapProperties({
       r'$projectId': projectId,
       r'$sdkVersion': pugSdkVersion,
