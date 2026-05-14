@@ -46,19 +46,16 @@ class Pug {
 
   Future<void> initialize(String projectId, PugOptions options) async {
     final logger = SafePugLogger(options.logger);
+    if (projectId.trim().isEmpty) {
+      throw ArgumentError('projectId is required');
+    }
+    if (options.apiKey.trim().isEmpty) {
+      throw ArgumentError('apiKey is required');
+    }
+    if (_client != null) {
+      throw StateError('Pug is already initialized');
+    }
     try {
-      if (projectId.trim().isEmpty) {
-        logger.error('Pug init skipped: projectId is required.');
-        return;
-      }
-      if (options.apiKey.trim().isEmpty) {
-        logger.error('Pug init skipped: apiKey is required.');
-        return;
-      }
-      if (_client != null) {
-        logger.warn('Pug is already initialized; repeated init ignored.');
-        return;
-      }
       final resolvedOptions = options.copyWith(
         logger: logger,
         storage: options.storage ?? await SharedPreferencesPugStorage.create(),
@@ -78,6 +75,7 @@ class Pug {
       }
     } catch (error, stackTrace) {
       logger.error('Pug init failed.', error, stackTrace);
+      rethrow;
     }
   }
 
@@ -93,14 +91,18 @@ class Pug {
     String externalId, {
     Map<String, Object?> traits = const {},
   }) async {
+    if (externalId.trim().isEmpty) {
+      throw ArgumentError('externalId is required');
+    }
+    final client = _client;
+    if (client == null) {
+      throw StateError('Pug is not initialized');
+    }
     try {
-      final client = _client;
-      if (client == null) {
-        return;
-      }
       await client.identify(externalId, traits: traits);
     } catch (error, stackTrace) {
       _fallbackLogger.error('Pug identify failed.', error, stackTrace);
+      rethrow;
     }
   }
 

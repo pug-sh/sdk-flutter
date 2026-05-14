@@ -201,33 +201,27 @@ class PugClient with WidgetsBindingObserver {
     String externalId, {
     Map<String, Object?> traits = const {},
   }) async {
-    try {
-      if (_disposed) {
-        _options.logger.warn('Pug identify skipped: client is destroyed.');
-        return;
-      }
-      if (externalId.trim().isEmpty) {
-        _options.logger.error('Pug identify skipped: externalId is required.');
-        return;
-      }
-      final profile = _resolveProfile();
-      final sanitizedTraits = PropertyMapper(
-        logger: _options.logger,
-      ).mapProperties(traits);
-      await _transport.identify(
-        IdentifyRequest(
-          projectId: projectId,
-          externalId: externalId,
-          anonymousId: profile.externalId == null ? profile.anonymousId : null,
-          deviceId: _resolveDeviceId(),
-          traits: sanitizedTraits,
-        ),
-      );
-      _storeProfile(profile.copyWith(externalId: externalId));
-      _storage.setString(_externalIdKey, externalId);
-    } catch (error, stackTrace) {
-      _options.logger.error('Pug identify failed.', error, stackTrace);
+    if (_disposed) {
+      throw StateError('Pug client is destroyed');
     }
+    if (externalId.trim().isEmpty) {
+      throw ArgumentError('externalId is required');
+    }
+    final profile = _resolveProfile();
+    final sanitizedTraits = PropertyMapper(
+      logger: _options.logger,
+    ).mapProperties(traits);
+    await _transport.identify(
+      IdentifyRequest(
+        projectId: projectId,
+        externalId: externalId,
+        anonymousId: profile.externalId == null ? profile.anonymousId : null,
+        deviceId: _resolveDeviceId(),
+        traits: sanitizedTraits,
+      ),
+    );
+    _storeProfile(profile.copyWith(externalId: externalId));
+    _storage.setString(_externalIdKey, externalId);
   }
 
   void reset() {

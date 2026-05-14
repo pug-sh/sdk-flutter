@@ -12,40 +12,30 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('init validates required values and repeated init is ignored', () async {
-    final invalidLogger = CapturingLogger();
     await expectLater(
-      Pug.init(
-        '',
-        PugOptions(apiKey: 'key', logger: invalidLogger, autoTrack: false),
-      ),
-      completes,
+      Pug.init('', const PugOptions(apiKey: 'key', autoTrack: false)),
+      throwsA(isA<ArgumentError>()),
     );
-    expect(invalidLogger.errors, contains(contains('projectId is required')));
 
     final transport = FakeTransport();
-    final logger = CapturingLogger();
     await Pug.init(
       'project',
       PugOptions(
         apiKey: 'key',
         transport: transport,
         storage: MemoryPugStorage(),
-        logger: logger,
-        autoTrack: false,
-      ),
-    );
-    await Pug.init(
-      'project',
-      PugOptions(
-        apiKey: 'key',
-        transport: FakeTransport(),
-        storage: MemoryPugStorage(),
-        logger: logger,
         autoTrack: false,
       ),
     );
 
-    expect(logger.warnings, contains(contains('already initialized')));
+    await expectLater(
+      () => Pug.init(
+        'project',
+        const PugOptions(apiKey: 'key', autoTrack: false),
+      ),
+      throwsA(isA<StateError>()),
+    );
+
     Pug.destroy();
   });
 
@@ -99,26 +89,26 @@ void main() {
     expect(event.customProperties.containsKey('none'), isFalse);
   });
 
-  test(
-    'identify never throws for invalid state or transport failures',
-    () async {
-      await expectLater(Pug.identify('user-before-init'), completes);
+  test('identify throws for invalid state or transport failures', () async {
+    await expectLater(
+      Pug.identify('user-before-init'),
+      throwsA(isA<StateError>()),
+    );
 
-      final logger = CapturingLogger();
-      final failedTransport =
-          FakeTransport()
-            ..identifyError = const PugTransportException('identify failed');
-      final client = testClient(transport: failedTransport, logger: logger);
+    final failedTransport =
+        FakeTransport()
+          ..identifyError = const PugTransportException('identify failed');
+    final client = testClient(transport: failedTransport);
 
-      await expectLater(client.identify(''), completes);
-      await expectLater(client.identify('user-1'), completes);
+    await expectLater(client.identify(''), throwsA(isA<ArgumentError>()));
 
-      expect(logger.errors, contains(contains('externalId is required')));
-      expect(logger.errors, contains(contains('Pug identify failed')));
-    },
-  );
+    await expectLater(
+      client.identify('user-1'),
+      throwsA(isA<PugTransportException>()),
+    );
+  });
 
-  test('public calls never throw when logger throws', () async {
+  test('init and identify throw even when logger throws', () async {
     await expectLater(
       Pug.init(
         '',
@@ -128,14 +118,14 @@ void main() {
           autoTrack: false,
         ),
       ),
-      completes,
+      throwsA(isA<ArgumentError>()),
     );
 
     final client = testClient(
       logger: const ThrowingLogger(),
       autoCaptureCampaigns: false,
     );
-    await expectLater(client.identify(''), completes);
+    await expectLater(client.identify(''), throwsA(isA<ArgumentError>()));
     expect(
       () => client.track('purchase', props: {'bad': double.nan}),
       returnsNormally,
