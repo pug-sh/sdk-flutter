@@ -10,6 +10,7 @@ class PugOptions {
     this.batch = const BatchConfig(),
     this.session = const SessionConfig(),
     this.autoTrack = true,
+    this.autoPageViews = true,
     this.dryRun = false,
     this.autoCaptureCampaigns = true,
     this.logger = const NoopPugLogger(),
@@ -25,6 +26,7 @@ class PugOptions {
   final BatchConfig batch;
   final SessionConfig session;
   final bool autoTrack;
+  final bool autoPageViews;
   final bool dryRun;
   final bool autoCaptureCampaigns;
   final PugLogger logger;
@@ -40,6 +42,7 @@ class PugOptions {
     BatchConfig? batch,
     SessionConfig? session,
     bool? autoTrack,
+    bool? autoPageViews,
     bool? dryRun,
     bool? autoCaptureCampaigns,
     PugLogger? logger,
@@ -55,9 +58,9 @@ class PugOptions {
       batch: batch ?? this.batch,
       session: session ?? this.session,
       autoTrack: autoTrack ?? this.autoTrack,
+      autoPageViews: autoPageViews ?? this.autoPageViews,
       dryRun: dryRun ?? this.dryRun,
-      autoCaptureCampaigns:
-          autoCaptureCampaigns ?? this.autoCaptureCampaigns,
+      autoCaptureCampaigns: autoCaptureCampaigns ?? this.autoCaptureCampaigns,
       logger: logger ?? this.logger,
       storage: storage ?? this.storage,
       transport: transport ?? this.transport,

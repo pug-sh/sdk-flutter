@@ -18,6 +18,46 @@ import 'push_models.dart';
 import 'session_manager.dart';
 import 'version.dart';
 
+class PugRouteObserver extends NavigatorObserver {
+  static void Function(String?, String?)? onRouteChanged;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _onRouteChanged(_routeName(route), _routeName(previousRoute));
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _onRouteChanged(_routeName(previousRoute), _routeName(route));
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    _onRouteChanged(_routeName(newRoute), _routeName(oldRoute));
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _onRouteChanged(_routeName(previousRoute), null);
+  }
+
+  void _onRouteChanged(String? url, String? referrer) {
+    onRouteChanged?.call(url, referrer);
+  }
+
+  String? _routeName(Route<dynamic>? route) {
+    if (route == null) {
+      return null;
+    }
+    final settings = route.settings;
+    final name = settings.name;
+    if (name != null && name.isNotEmpty) {
+      return name;
+    }
+    return route.runtimeType.toString();
+  }
+}
+
 class PugClient with WidgetsBindingObserver {
   PugClient({
     required this.projectId,
@@ -47,6 +87,26 @@ class PugClient with WidgetsBindingObserver {
     );
   }
 
+  static void Function(String?, String?)? onRouteChanged;
+
+  void notifyRouteChanged(String? url, String? referrer) {
+    if (!_options.autoPageViews || _disposed) {
+      return;
+    }
+    if (url == _currentRoute) {
+      return;
+    }
+    _previousRoute = _currentRoute;
+    _currentRoute = url;
+    track(
+      'page_view',
+      props: {
+        if (url != null) 'url': url,
+        if (_previousRoute != null) 'referrer': _previousRoute,
+      },
+    );
+  }
+
   final String projectId;
   final PugOptions _options;
   final PugClock _clock;
@@ -64,6 +124,8 @@ class PugClient with WidgetsBindingObserver {
   bool _isForeground = false;
   bool _started = false;
   final Random _sampling = Random();
+  String? _currentRoute;
+  String? _previousRoute;
 
   @visibleForTesting
   PugEventQueue get queue => _queue;
@@ -250,7 +312,9 @@ class PugClient with WidgetsBindingObserver {
   }) async {
     try {
       if (_disposed) {
-        _options.logger.warn('Pug push subscribe skipped: client is destroyed.');
+        _options.logger.warn(
+          'Pug push subscribe skipped: client is destroyed.',
+        );
         return;
       }
       final deviceId = _resolveDeviceId();
@@ -333,6 +397,8 @@ class PugClient with WidgetsBindingObserver {
     unawaited(_linkSubscription?.cancel());
     _linkProvider?.dispose();
     _lifecycleBinding?.removeObserver(this);
+    _currentRoute = null;
+    _previousRoute = null;
     _disposed = true;
   }
 
@@ -562,9 +628,10 @@ class PugClient with WidgetsBindingObserver {
       return;
     }
     _flushTimer?.cancel();
-    final wait = withBackoff
-        ? Duration(milliseconds: max(_options.batch.maxWaitMs, 1000) * 2)
-        : Duration(milliseconds: _options.batch.maxWaitMs);
+    final wait =
+        withBackoff
+            ? Duration(milliseconds: max(_options.batch.maxWaitMs, 1000) * 2)
+            : Duration(milliseconds: _options.batch.maxWaitMs);
     _flushTimer = Timer(wait, () => unawaited(flush()));
   }
 }
@@ -586,6 +653,7 @@ PugOptions _normalizeOptions(PugOptions options) {
     ),
     session: options.session,
     autoTrack: options.autoTrack,
+    autoPageViews: options.autoPageViews,
     dryRun: options.dryRun,
     autoCaptureCampaigns: options.autoCaptureCampaigns,
     logger: logger,

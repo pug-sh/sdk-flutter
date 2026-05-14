@@ -84,10 +84,11 @@ class PugProtoCodec {
   Map<String, Object?> _propertyMapToPlain(Map<String, PropertyValue> values) {
     return values.map((key, value) {
       final plain = switch (value.kind) {
-        'timestampValue' => DateTime.fromMillisecondsSinceEpoch(
-          value.value as int,
-          isUtc: true,
-        ).toIso8601String(),
+        'timestampValue' =>
+          DateTime.fromMillisecondsSinceEpoch(
+            value.value as int,
+            isUtc: true,
+          ).toIso8601String(),
         _ => value.value,
       };
       return MapEntry(key, plain);

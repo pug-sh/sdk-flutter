@@ -72,9 +72,10 @@ class HttpPugTransport implements PugTransport {
   }
 
   String _joinPath(String basePath, String path) {
-    final cleanBase = basePath.endsWith('/')
-        ? basePath.substring(0, basePath.length - 1)
-        : basePath;
+    final cleanBase =
+        basePath.endsWith('/')
+            ? basePath.substring(0, basePath.length - 1)
+            : basePath;
     return '$cleanBase$path';
   }
 

@@ -37,3 +37,9 @@
 
 - [x] Add docs/tests for each parity feature as it lands.
   - Keep tests focused on behavior shared with the web SDK and mobile-specific expectations from `mobile-sdk-ai-spec.md`.
+
+- [x] Add auto page view tracking.
+  - Added `autoPageViews` option (default: true).
+  - Added `PugRouteObserver` that tracks `page_view` events on route changes.
+  - Added `$url` and `$referrer` properties to page_view events.
+  - Host apps must register `Pug.routeObserver` with their Navigator.

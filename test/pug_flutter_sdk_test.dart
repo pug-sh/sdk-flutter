@@ -6,7 +6,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter_sdk/pug_flutter_fcm.dart';
 import 'package:pug_flutter_sdk/src/event_queue_storage.dart';
-import 'package:pug_flutter_sdk/src/runtime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -17,11 +16,7 @@ void main() {
     await expectLater(
       Pug.init(
         '',
-        PugOptions(
-          apiKey: 'key',
-          logger: invalidLogger,
-          autoTrack: false,
-        ),
+        PugOptions(apiKey: 'key', logger: invalidLogger, autoTrack: false),
       ),
       completes,
     );
@@ -104,20 +99,24 @@ void main() {
     expect(event.customProperties.containsKey('none'), isFalse);
   });
 
-  test('identify never throws for invalid state or transport failures', () async {
-    await expectLater(Pug.identify('user-before-init'), completes);
+  test(
+    'identify never throws for invalid state or transport failures',
+    () async {
+      await expectLater(Pug.identify('user-before-init'), completes);
 
-    final logger = CapturingLogger();
-    final failedTransport = FakeTransport()
-      ..identifyError = const PugTransportException('identify failed');
-    final client = testClient(transport: failedTransport, logger: logger);
+      final logger = CapturingLogger();
+      final failedTransport =
+          FakeTransport()
+            ..identifyError = const PugTransportException('identify failed');
+      final client = testClient(transport: failedTransport, logger: logger);
 
-    await expectLater(client.identify(''), completes);
-    await expectLater(client.identify('user-1'), completes);
+      await expectLater(client.identify(''), completes);
+      await expectLater(client.identify('user-1'), completes);
 
-    expect(logger.errors, contains(contains('externalId is required')));
-    expect(logger.errors, contains(contains('Pug identify failed')));
-  });
+      expect(logger.errors, contains(contains('externalId is required')));
+      expect(logger.errors, contains(contains('Pug identify failed')));
+    },
+  );
 
   test('public calls never throw when logger throws', () async {
     await expectLater(
@@ -341,15 +340,20 @@ void main() {
   test(
     'transient transport errors rollback and permanent errors drop',
     () async {
-      final transient = FakeTransport()
-        ..batchError = const PugTransportException('retry', permanent: false);
+      final transient =
+          FakeTransport()
+            ..batchError = const PugTransportException(
+              'retry',
+              permanent: false,
+            );
       final transientClient = testClient(transport: transient);
       transientClient.track('one');
       await transientClient.flush();
       expect(transientClient.queue.peekUnlocked().single.kind, 'one');
 
-      final permanent = FakeTransport()
-        ..batchError = const PugTransportException('drop', permanent: true);
+      final permanent =
+          FakeTransport()
+            ..batchError = const PugTransportException('drop', permanent: true);
       final permanentClient = testClient(transport: permanent);
       permanentClient.track('one');
       await permanentClient.flush();
@@ -397,6 +401,43 @@ void main() {
     expect(client.queue.peekUnlocked().map((event) => event.kind), [
       'app_open',
     ]);
+  });
+
+  test('auto page views tracks page_view on route changes', () async {
+    final transport = FakeTransport();
+    final client = testClient(transport: transport, autoPageViews: true);
+
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    PugRouteObserver.onRouteChanged?.call('/home', null);
+
+    expect(client.queue.peekUnlocked().map((event) => event.kind), [
+      'page_view',
+    ]);
+    final pageView = client.queue.peekUnlocked().single;
+    expect(pageView.customProperties['url']?.value, '/home');
+    expect(pageView.customProperties.containsKey('referrer'), isFalse);
+
+    PugRouteObserver.onRouteChanged?.call('/about', '/home');
+
+    expect(client.queue.peekUnlocked().length, 2);
+    expect(
+      client.queue.peekUnlocked().last.customProperties['url']?.value,
+      '/about',
+    );
+    expect(
+      client.queue.peekUnlocked().last.customProperties['referrer']?.value,
+      '/home',
+    );
+  });
+
+  test('auto page views disabled does not track page_view', () async {
+    final transport = FakeTransport();
+    final client = testClient(transport: transport, autoPageViews: false);
+
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    PugRouteObserver.onRouteChanged?.call('/home', null);
+
+    expect(client.queue.peekUnlocked(), isEmpty);
   });
 
   test('destroy starts a best-effort final flush', () async {
@@ -521,6 +562,7 @@ PugClient testClient({
   PugAutoPropertyProvider? autoPropertyProvider,
   PugLinkProvider? linkProvider,
   bool autoTrack = false,
+  bool autoPageViews = false,
   bool autoCaptureCampaigns = false,
   WidgetsBinding? lifecycleBinding,
 }) {
@@ -535,6 +577,7 @@ PugClient testClient({
           autoPropertyProvider ?? const PugStaticAutoPropertyProvider({}),
       linkProvider: linkProvider,
       autoTrack: autoTrack,
+      autoPageViews: autoPageViews,
       autoCaptureCampaigns: autoCaptureCampaigns,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),
@@ -717,4 +760,21 @@ class FakePushProvider implements PushProvider {
 
   @override
   Map<Object?, Object?> notificationData(Object source) => const {};
+}
+
+class TestRoute extends Route<dynamic> {
+  TestRoute({required this.name});
+
+  final String name;
+
+  @override
+  RouteSettings get settings => RouteSettings(name: name);
+
+  @override
+  List<OverlayEntry> get overlayEntries => [];
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
 }

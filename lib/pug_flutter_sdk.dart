@@ -9,5 +9,6 @@ export 'src/errors.dart';
 export 'src/events.dart';
 export 'src/pug.dart';
 export 'src/push.dart';
+export 'src/runtime.dart';
 export 'src/shared_preferences_storage.dart';
 export 'src/well_known_events.dart';
