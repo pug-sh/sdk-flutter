@@ -65,7 +65,7 @@ class Pug {
       options: resolvedOptions,
       lifecycleBinding: WidgetsBinding.instance,
     );
-    client.start();
+    await client.start();
     _client = client;
   }
 

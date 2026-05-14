@@ -8,6 +8,8 @@ Pug Flutter SDK is a Flutter/Dart analytics, identity, session, batching, and pu
 
 The public barrel is `lib/pug_flutter_sdk.dart`. Core runtime logic lives under `lib/src/`; generated protobuf Dart code lives under `lib/src/gen/` and is produced from `proto/**/*.proto`.
 
+Minimum supported SDKs are Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`. This floor is driven by the generated protobuf code and the `protobuf` runtime.
+
 ## Build And Development Commands
 
 ```bash
@@ -40,6 +42,8 @@ make check        # protos + format + analyze + test
 
 Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle changes emit `app_open` and `app_close`.
 
+Campaign capture is enabled by default through `PugOptions.autoCaptureCampaigns`. On start, `PugClient` reads the initial app/deep link and listens for later links through `PugLinkProvider`/`AppLinksPugLinkProvider`; host apps must still configure Android App Links, iOS Universal Links, or custom URL schemes.
+
 ### Storage
 
 `PugStorage` is synchronous by design so event/session/profile reads can happen inside `track()`.
@@ -54,6 +58,7 @@ State keys are project-namespaced:
 - `__pug_<projectId>_profile__`
 - `__pug_<projectId>_external_id__`
 - `__pug_<projectId>_queue__`
+- `__pug_<projectId>_campaign__`
 
 ### Queue
 
@@ -85,7 +90,11 @@ Permanent HTTP failures drop events; transient failures roll back and retry late
 
 Auto properties include `$projectId`, `$sdkVersion`, `$platform`, `$os`, `$osVersion`, `$locale`, `$timezone`, screen dimensions, app version/build/package where available, device manufacturer/model where available, and connectivity radio type where available.
 
+Campaign auto-properties are merged from the latest captured app/deep link: `$utmSource`, `$utmMedium`, `$utmCampaign`, `$utmTerm`, `$utmContent`, `$gclid`, `$fbclid`, `$msclkid`, and `$ttclid`. They are stored under the project-scoped campaign key and attached to later events.
+
 Tests should prefer `PugStaticAutoPropertyProvider` to avoid platform plugin dependencies.
+
+Tests for campaign capture should inject a fake `PugLinkProvider` instead of invoking platform channels from `app_links`.
 
 ### Events
 
@@ -159,12 +168,13 @@ Flutter/mobile-specific parity:
 - App lifecycle auto tracking for `app_open` and `app_close`.
 - `SharedPreferencesPugStorage` via async `Pug.init(...)`.
 - Built-in FCM provider through `pug_flutter_fcm.dart`.
+- Automatic campaign capture from app links/deep links using `app_links` 3.x.
 
 Remaining gaps:
 
 - Flutter cannot implement web `sendBeacon`; shutdown flush is best-effort and relies on platform time to complete async work.
 - Push packaging is not fully at web dependency-level parity. The core barrel avoids FCM symbols, but the package still has `firebase_messaging` in the dependency graph.
 - Dart cannot match TypeScript's overloaded `TrackFn`/`WellKnownEventPropsMap` ergonomics directly. Current parity is constants plus runtime schema-aware validation.
-- No browser-style auto trackers for click, scroll, forms, rage click, dead click, page URL/referrer/title, UTM, or UA client hints. These are mostly web-specific and intentionally not implemented for mobile unless a future product requirement says otherwise.
+- No browser-style auto trackers for click, scroll, forms, rage click, dead click, page URL/referrer/title, or UA client hints. UTM-style campaign capture is implemented from app/deep links, but this SDK does not capture install referrer/deferred attribution automatically.
 
 Keep `TODO.md` synchronized when closing or adding parity items.

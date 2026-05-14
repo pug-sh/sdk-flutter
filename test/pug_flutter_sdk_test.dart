@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -117,6 +118,46 @@ void main() {
     expect(autoProperties[r'$screenWidth']?.value, 390);
     expect(autoProperties[r'$screenHeight']?.value, 844);
     expect(autoProperties[r'$networkType']?.value, 'wifi');
+  });
+
+  test('campaign properties are captured from initial app link', () async {
+    final client = testClient(
+      linkProvider: FakeLinkProvider(
+        initial: Uri.parse(
+          'https://example.com/welcome?utm_source=google&utm_medium=cpc'
+          '&utm_campaign=spring&gclid=click-1',
+        ),
+      ),
+      autoCaptureCampaigns: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    client.track('signup');
+
+    final autoProperties = client.queue.peekUnlocked().single.autoProperties;
+    expect(autoProperties[r'$utmSource']?.value, 'google');
+    expect(autoProperties[r'$utmMedium']?.value, 'cpc');
+    expect(autoProperties[r'$utmCampaign']?.value, 'spring');
+    expect(autoProperties[r'$gclid']?.value, 'click-1');
+  });
+
+  test('campaign properties update from later app links', () async {
+    final linkProvider = FakeLinkProvider();
+    final client = testClient(
+      linkProvider: linkProvider,
+      autoCaptureCampaigns: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    linkProvider.add(
+      Uri.parse('pug://open?utm_source=newsletter&utm_content=hero'),
+    );
+    await Future<void>.delayed(Duration.zero);
+    client.track('open');
+
+    final autoProperties = client.queue.peekUnlocked().single.autoProperties;
+    expect(autoProperties[r'$utmSource']?.value, 'newsletter');
+    expect(autoProperties[r'$utmContent']?.value, 'hero');
   });
 
   test('well-known events validate known props and preserve schema types', () {
@@ -411,7 +452,9 @@ PugClient testClient({
   MemoryPugStorage? storage,
   PugLogger? logger,
   PugAutoPropertyProvider? autoPropertyProvider,
+  PugLinkProvider? linkProvider,
   bool autoTrack = false,
+  bool autoCaptureCampaigns = false,
   WidgetsBinding? lifecycleBinding,
 }) {
   final client = PugClient(
@@ -423,7 +466,9 @@ PugClient testClient({
       logger: logger ?? const NoopPugLogger(),
       autoPropertyProvider:
           autoPropertyProvider ?? const PugStaticAutoPropertyProvider({}),
+      linkProvider: linkProvider,
       autoTrack: autoTrack,
+      autoCaptureCampaigns: autoCaptureCampaigns,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),
     clock: clock ?? FakeClock(1000),
@@ -532,6 +577,28 @@ class CapturingLogger implements PugLogger {
   @override
   void warn(String message) {
     warnings.add(message);
+  }
+}
+
+class FakeLinkProvider implements PugLinkProvider {
+  FakeLinkProvider({this.initial});
+
+  final Uri? initial;
+  final StreamController<Uri> _controller = StreamController<Uri>.broadcast();
+
+  void add(Uri uri) {
+    _controller.add(uri);
+  }
+
+  @override
+  Future<Uri?> initialUri() async => initial;
+
+  @override
+  Stream<Uri> get uriStream => _controller.stream;
+
+  @override
+  void dispose() {
+    unawaited(_controller.close());
   }
 }
 

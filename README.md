@@ -4,6 +4,8 @@ Flutter SDK for Pug analytics, profile identity, session tracking, batching, and
 
 The SDK sends binary protobuf payloads to the Pug backend and keeps transport, storage, and push providers injectable for tests and custom integrations.
 
+Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`.
+
 ## Features
 
 - Event tracking with typed property mapping.
@@ -13,6 +15,7 @@ The SDK sends binary protobuf payloads to the Pug backend and keeps transport, s
 - `identify()` profile merge semantics with first-call anonymous ID linking.
 - Provider-neutral push registration.
 - Built-in Firebase Cloud Messaging provider.
+- Automatic campaign capture from app links and deep links.
 - Notification received, opened, and dismissed event helpers.
 - Injectable storage, transport, clock, ID generator, logger, and push provider for tests.
 - Well-known event constants and schema-aware validation for known event fields.
@@ -88,6 +91,33 @@ Repeated init calls are ignored with a warning. `track()` is best-effort and doe
 When `autoTrack` is enabled, the SDK tracks `app_open` when the app is already
 resumed at init or later enters foreground. It tracks `app_close` when the app
 leaves foreground.
+
+Campaign capture is enabled by default. When the app receives an app link or
+deep link containing UTM-style query parameters, Pug stores the latest campaign
+context and attaches it to later events as auto-properties:
+
+- `$utmSource`
+- `$utmMedium`
+- `$utmCampaign`
+- `$utmTerm`
+- `$utmContent`
+- `$gclid`
+- `$fbclid`
+- `$msclkid`
+- `$ttclid`
+
+The host app must still configure platform deep linking, such as Android App
+Links, iOS Universal Links, or a custom URL scheme. To disable campaign capture:
+
+```dart
+await Pug.init(
+  'project-id',
+  const PugOptions(
+    apiKey: 'pug_api_key',
+    autoCaptureCampaigns: false,
+  ),
+);
+```
 
 ## Track Events
 

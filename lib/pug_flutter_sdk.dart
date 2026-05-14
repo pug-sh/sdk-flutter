@@ -1,6 +1,7 @@
 library;
 
 export 'src/auto_properties.dart';
+export 'src/campaign.dart';
 export 'src/clock_ids.dart';
 export 'src/configuration.dart';
 export 'src/contracts.dart';

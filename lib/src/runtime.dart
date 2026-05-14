@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/widgets.dart';
 
 import 'auto_properties.dart';
+import 'campaign.dart';
 import 'clock_ids.dart';
 import 'configuration.dart';
 import 'contracts.dart';
@@ -56,6 +57,8 @@ class PugClient with WidgetsBindingObserver {
   late final PugTransport _transport;
   late final PugEventQueue _queue;
   Timer? _flushTimer;
+  StreamSubscription<Uri>? _linkSubscription;
+  PugLinkProvider? _linkProvider;
   bool _isFlushing = false;
   bool _disposed = false;
   bool _isForeground = false;
@@ -69,8 +72,9 @@ class PugClient with WidgetsBindingObserver {
   String get _deviceKey => '__pug_${projectId}_device_id__';
   String get _externalIdKey => '__pug_${projectId}_external_id__';
   String get _queueKey => '__pug_${projectId}_queue__';
+  String get _campaignKey => '__pug_${projectId}_campaign__';
 
-  void start() {
+  Future<void> start() async {
     if (projectId.trim().isEmpty) {
       throw const PugException('projectId is required.');
     }
@@ -78,6 +82,9 @@ class PugClient with WidgetsBindingObserver {
       throw const PugException('apiKey is required.');
     }
     _lifecycleBinding?.addObserver(this);
+    if (_options.autoCaptureCampaigns) {
+      await _startCampaignCapture();
+    }
     if (_options.autoTrack &&
         _lifecycleBinding?.lifecycleState == AppLifecycleState.resumed) {
       _isForeground = true;
@@ -289,6 +296,8 @@ class PugClient with WidgetsBindingObserver {
     _flushTimer?.cancel();
     unawaited(flushAll());
     _queue.dispose();
+    unawaited(_linkSubscription?.cancel());
+    _linkProvider?.dispose();
     _lifecycleBinding?.removeObserver(this);
     _disposed = true;
   }
@@ -328,6 +337,7 @@ class PugClient with WidgetsBindingObserver {
       r'$projectId': projectId,
       r'$sdkVersion': pugSdkVersion,
       ..._autoPropertyProvider.properties(),
+      ..._storedCampaignProperties(),
     });
     final now = _clock.nowMillis();
     final updatedSession = session.copyWith(lastActivityTime: now);
@@ -427,6 +437,57 @@ class PugClient with WidgetsBindingObserver {
     return _sampling.nextDouble() <= _options.samplingRate;
   }
 
+  Future<void> _startCampaignCapture() async {
+    if (!_options.autoCaptureCampaigns) {
+      return;
+    }
+    final provider = _options.linkProvider ?? AppLinksPugLinkProvider();
+    _linkProvider = provider;
+
+    try {
+      final initial = await provider.initialUri();
+      if (initial != null) {
+        _captureCampaign(initial);
+      }
+    } catch (error) {
+      _options.logger.warn('Pug could not read initial campaign link.');
+    }
+
+    try {
+      _linkSubscription = provider.uriStream.listen(
+        _captureCampaign,
+        onError: (_) {
+          _options.logger.warn('Pug campaign link stream failed.');
+        },
+      );
+    } catch (error) {
+      _options.logger.warn('Pug could not listen for campaign links.');
+    }
+  }
+
+  void _captureCampaign(Uri uri) {
+    final properties = campaignPropertiesFromUri(uri);
+    if (properties.isEmpty) {
+      return;
+    }
+    _storage.setString(_campaignKey, jsonEncode(properties));
+  }
+
+  Map<String, Object?> _storedCampaignProperties() {
+    final raw = _storage.getString(_campaignKey);
+    final decoded = raw == null ? null : _tryDecode(raw);
+    if (decoded == null) {
+      return const {};
+    }
+    final properties = <String, Object?>{};
+    for (final entry in decoded.entries) {
+      if (entry.key.startsWith(r'$')) {
+        properties[entry.key] = entry.value;
+      }
+    }
+    return properties;
+  }
+
   void _scheduleFlush({bool withBackoff = false}) {
     if (_disposed) {
       return;
@@ -456,10 +517,12 @@ PugOptions _normalizeOptions(PugOptions options) {
     session: options.session,
     autoTrack: options.autoTrack,
     dryRun: options.dryRun,
+    autoCaptureCampaigns: options.autoCaptureCampaigns,
     logger: options.logger,
     storage: options.storage,
     transport: options.transport,
     autoPropertyProvider: options.autoPropertyProvider,
+    linkProvider: options.linkProvider,
   );
 }
 

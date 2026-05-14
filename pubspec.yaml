@@ -4,22 +4,23 @@ version: 0.0.1
 homepage:
 
 environment:
-  sdk: ^3.11.5
-  flutter: ">=1.17.0"
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.29.0"
 
 dependencies:
-  connectivity_plus: ^7.1.1
-  device_info_plus: ^13.1.0
-  firebase_messaging: ^16.2.1
+  app_links: ">=3.5.1 <4.0.0"
+  connectivity_plus: ">=6.0.0 <8.0.0"
+  device_info_plus: ">=11.0.0 <14.0.0"
+  firebase_messaging: ">=15.0.0 <17.0.0"
   fixnum: ^1.1.1
   flutter:
     sdk: flutter
-  package_info_plus: ^10.1.0
-  protobuf: ^6.0.0
-  shared_preferences: ^2.5.5
+  package_info_plus: ">=8.0.0 <11.0.0"
+  protobuf: ">=6.0.0 <7.0.0"
+  shared_preferences: ">=2.3.0 <3.0.0"
 
 dev_dependencies:
-  flutter_lints: ^6.0.0
+  flutter_lints: ">=4.0.0 <7.0.0"
   flutter_test:
     sdk: flutter
 

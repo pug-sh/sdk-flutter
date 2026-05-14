@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_dynamic_calls
+
 import 'dart:async';
 import 'dart:io';
 
@@ -53,8 +55,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     }
 
     try {
-      final results = await (connectivity ?? Connectivity())
-          .checkConnectivity();
+      final results = await (connectivity ?? Connectivity()).checkConnectivity();
       properties[r'$networkType'] = _networkType(results);
     } catch (error) {
       logger?.warn('Pug could not read connectivity info for auto properties.');
@@ -85,43 +86,45 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       return const {};
     }
     if (Platform.isAndroid) {
-      final info = await plugin.androidInfo;
+      final dynamic info = await plugin.androidInfo;
       return {
-        r'$deviceManufacturer': info.manufacturer,
-        r'$deviceModel': info.model,
-        r'$deviceName': info.name,
+        r'$deviceManufacturer': _readString(info, 'manufacturer'),
+        r'$deviceModel': _readString(info, 'model'),
+        r'$deviceName': _readString(info, 'name'),
       };
     }
     if (Platform.isIOS) {
-      final info = await plugin.iosInfo;
+      final dynamic info = await plugin.iosInfo;
+      final modelName = _readString(info, 'modelName');
       return {
         r'$deviceManufacturer': 'Apple',
-        r'$deviceModel': info.modelName.isNotEmpty
-            ? info.modelName
-            : info.model,
+        r'$deviceModel': modelName.isNotEmpty
+            ? modelName
+            : _readString(info, 'model'),
       };
     }
     if (Platform.isMacOS) {
-      final info = await plugin.macOsInfo;
+      final dynamic info = await plugin.macOsInfo;
+      final modelName = _readString(info, 'modelName');
       return {
         r'$deviceManufacturer': 'Apple',
-        r'$deviceModel': info.modelName.isNotEmpty
-            ? info.modelName
-            : info.model,
+        r'$deviceModel': modelName.isNotEmpty
+            ? modelName
+            : _readString(info, 'model'),
       };
     }
     if (Platform.isLinux) {
-      final info = await plugin.linuxInfo;
+      final dynamic info = await plugin.linuxInfo;
       return {
-        r'$deviceManufacturer': info.prettyName,
-        r'$deviceModel': info.name,
+        r'$deviceManufacturer': _readString(info, 'prettyName'),
+        r'$deviceModel': _readString(info, 'name'),
       };
     }
     if (Platform.isWindows) {
-      final info = await plugin.windowsInfo;
+      final dynamic info = await plugin.windowsInfo;
       return {
-        r'$deviceManufacturer': info.computerName,
-        r'$deviceModel': info.productName,
+        r'$deviceManufacturer': _readString(info, 'computerName'),
+        r'$deviceModel': _readString(info, 'productName'),
       };
     }
     return const {};
@@ -144,26 +147,51 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     };
   }
 
-  static String _networkType(List<ConnectivityResult> results) {
-    if (results.contains(ConnectivityResult.none)) {
+  static String _readString(Object? value, String name) {
+    try {
+      final dynamic dynamicValue = value;
+      final Object? field = switch (name) {
+        'manufacturer' => dynamicValue.manufacturer,
+        'model' => dynamicValue.model,
+        'name' => dynamicValue.name,
+        'modelName' => dynamicValue.modelName,
+        'prettyName' => dynamicValue.prettyName,
+        'computerName' => dynamicValue.computerName,
+        'productName' => dynamicValue.productName,
+        _ => null,
+      };
+      return field?.toString() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static String _networkType(Object results) {
+    final values = results is Iterable<ConnectivityResult>
+        ? results
+        : results is ConnectivityResult
+        ? <ConnectivityResult>[results]
+        : const <ConnectivityResult>[];
+    final names = values.map((value) => value.name).toSet();
+    if (names.contains('none')) {
       return 'none';
     }
-    if (results.contains(ConnectivityResult.wifi)) {
+    if (names.contains('wifi')) {
       return 'wifi';
     }
-    if (results.contains(ConnectivityResult.mobile)) {
+    if (names.contains('mobile')) {
       return 'mobile';
     }
-    if (results.contains(ConnectivityResult.ethernet)) {
+    if (names.contains('ethernet')) {
       return 'ethernet';
     }
-    if (results.contains(ConnectivityResult.vpn)) {
+    if (names.contains('vpn')) {
       return 'vpn';
     }
-    if (results.contains(ConnectivityResult.bluetooth)) {
+    if (names.contains('bluetooth')) {
       return 'bluetooth';
     }
-    if (results.contains(ConnectivityResult.other)) {
+    if (names.contains('other')) {
       return 'other';
     }
     return 'unknown';
