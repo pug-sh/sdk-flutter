@@ -11,7 +11,7 @@ dependencies:
   app_links: ">=3.5.1 <4.0.0"
   connectivity_plus: ">=6.0.0 <8.0.0"
   device_info_plus: ">=11.0.0 <14.0.0"
-  firebase_messaging: ">=15.0.0 <17.0.0"
+
   fixnum: ^1.1.1
   flutter:
     sdk: flutter

@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pug_flutter_sdk/pug_flutter_fcm.dart';
+import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
 import 'package:pug_flutter_sdk/src/event_queue_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -461,45 +460,6 @@ void main() {
     },
   );
 
-  test(
-    'FCM provider supplies token and extracts remote message data',
-    () async {
-      var deleted = false;
-      final provider = FcmPushProvider(
-        getToken: () async => 'fcm-token',
-        deleteToken: () async {
-          deleted = true;
-        },
-        targetPlatform: TargetPlatform.android,
-      );
-
-      expect(provider.provider, 'fcm');
-      expect(provider.platform, 'android');
-      expect(await provider.getToken(), 'fcm-token');
-
-      await provider.deleteToken();
-      expect(deleted, isTrue);
-
-      final data = provider.notificationData(
-        const RemoteMessage(
-          data: <String, String>{'campaignId': 'campaign-1'},
-          messageId: 'message-1',
-          notification: RemoteNotification(title: 'Title', body: 'Body'),
-        ),
-      );
-
-      expect(data['campaignId'], 'campaign-1');
-      expect(data['messageId'], 'message-1');
-      expect(data['title'], 'Title');
-      expect(data['body'], 'Body');
-    },
-  );
-
-  test('FCM provider reports unavailable tokens', () async {
-    final provider = FcmPushProvider(getToken: () async => null);
-
-    await expectLater(provider.getToken(), completion(''));
-  });
 
   test('push subscribe and unsubscribe never throw', () async {
     await expectLater(PugPush.subscribe(FakePushProvider()), completes);
@@ -540,6 +500,34 @@ void main() {
       expect(event.customProperties['campaignId']?.value, '(unknown)');
     },
   );
+
+  test('destroy removes all storage keys', () async {
+    final transport = FakeTransport();
+    final storage = MemoryPugStorage();
+    final client = testClient(transport: transport, storage: storage);
+
+    // Initialize storage with some data
+    client.track('test_event');
+    await client.identify('test-user');
+    await Future<void>.delayed(Duration.zero);
+
+    // Verify storage keys exist before destroy
+    expect(storage.getString('__pug_project_session__'), isNotNull);
+    expect(storage.getString('__pug_project_profile__'), isNotNull);
+    expect(storage.getString('__pug_project_device_id__'), isNotNull);
+    expect(storage.getString('__pug_project_external_id__'), isNotNull);
+    expect(storage.getString('__pug_project_queue__'), isNotNull);
+
+    // Destroy the client
+    client.destroy();
+
+    // Verify all storage keys are removed
+    expect(storage.getString('__pug_project_session__'), isNull);
+    expect(storage.getString('__pug_project_profile__'), isNull);
+    expect(storage.getString('__pug_project_device_id__'), isNull);
+    expect(storage.getString('__pug_project_external_id__'), isNull);
+    expect(storage.getString('__pug_project_queue__'), isNull);
+  });
 }
 
 PugClient testClient({
