@@ -66,6 +66,7 @@ class PugClient with WidgetsBindingObserver {
 
   String get _sessionKey => '__pug_${projectId}_session__';
   String get _profileKey => '__pug_${projectId}_profile__';
+  String get _deviceKey => '__pug_${projectId}_device_id__';
   String get _externalIdKey => '__pug_${projectId}_external_id__';
   String get _queueKey => '__pug_${projectId}_queue__';
 
@@ -131,7 +132,7 @@ class PugClient with WidgetsBindingObserver {
         projectId: projectId,
         externalId: externalId,
         anonymousId: profile.externalId == null ? profile.anonymousId : null,
-        deviceId: _resolveSession().deviceId,
+        deviceId: _resolveDeviceId(),
         traits: sanitizedTraits,
       ),
     );
@@ -141,12 +142,13 @@ class PugClient with WidgetsBindingObserver {
 
   void reset() {
     final now = _clock.nowMillis();
+    final deviceId = _rotateDeviceId();
     final profile = ProfileState(anonymousId: 'anon-${_ids.nextId()}');
     final session = SessionState(
       sessionId: _ids.nextId(),
       startTime: now,
       lastActivityTime: now,
-      deviceId: _ids.nextId(),
+      deviceId: deviceId,
     );
     _storeProfile(profile);
     _storeSession(session);
@@ -154,14 +156,14 @@ class PugClient with WidgetsBindingObserver {
   }
 
   void rotate() {
-    final current = _resolveSession();
     final now = _clock.nowMillis();
+    final deviceId = _resolveDeviceId();
     _storeSession(
       SessionState(
         sessionId: _ids.nextId(),
         startTime: now,
         lastActivityTime: now,
-        deviceId: current.deviceId,
+        deviceId: deviceId,
       ),
     );
   }
@@ -218,7 +220,7 @@ class PugClient with WidgetsBindingObserver {
     PushProvider provider, {
     PushSubscribeOptions options = const PushSubscribeOptions(),
   }) async {
-    final session = _resolveSession();
+    final deviceId = _resolveDeviceId();
     final profile = _resolveProfile();
     final token = await provider.getToken();
     final properties = <String, Object?>{
@@ -230,7 +232,7 @@ class PugClient with WidgetsBindingObserver {
         provider: provider.provider,
         platform: provider.platform,
         token: token,
-        deviceId: session.deviceId,
+        deviceId: deviceId,
         profileExternalId: options.profileExternalId ?? profile.externalId,
         profileId: options.profileId,
         properties: properties,
@@ -339,6 +341,7 @@ class PugClient with WidgetsBindingObserver {
 
   SessionState _resolveSession() {
     final now = _clock.nowMillis();
+    final deviceId = _resolveDeviceId();
     final stored = _storage.getString(_sessionKey);
     final decoded = stored == null ? null : _tryDecode(stored);
     final current = decoded == null ? null : SessionState.fromJson(decoded);
@@ -347,7 +350,7 @@ class PugClient with WidgetsBindingObserver {
         sessionId: _ids.nextId(),
         startTime: now,
         lastActivityTime: now,
-        deviceId: _ids.nextId(),
+        deviceId: deviceId,
       );
       _storeSession(created);
       return created;
@@ -364,10 +367,26 @@ class PugClient with WidgetsBindingObserver {
       sessionId: _ids.nextId(),
       startTime: now,
       lastActivityTime: now,
-      deviceId: current.deviceId,
+      deviceId: deviceId,
     );
     _storeSession(rotated);
     return rotated;
+  }
+
+  String _resolveDeviceId() {
+    final stored = _storage.getString(_deviceKey);
+    if (stored != null && stored.isNotEmpty) {
+      return stored;
+    }
+    final created = _ids.nextId();
+    _storage.setString(_deviceKey, created);
+    return created;
+  }
+
+  String _rotateDeviceId() {
+    final deviceId = _ids.nextId();
+    _storage.setString(_deviceKey, deviceId);
+    return deviceId;
   }
 
   ProfileState _resolveProfile() {

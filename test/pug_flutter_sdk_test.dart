@@ -11,28 +11,30 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('init validates required values and repeated init is ignored', () {
-    expect(
-      () => Pug.init('', const PugOptions(apiKey: 'key')),
+  test('init validates required values and repeated init is ignored', () async {
+    await expectLater(
+      Pug.init('', const PugOptions(apiKey: 'key')),
       throwsA(isA<PugException>()),
     );
 
     final transport = FakeTransport();
     final logger = CapturingLogger();
-    Pug.init(
+    await Pug.init(
       'project',
       PugOptions(
         apiKey: 'key',
         transport: transport,
+        storage: MemoryPugStorage(),
         logger: logger,
         autoTrack: false,
       ),
     );
-    Pug.init(
+    await Pug.init(
       'project',
       PugOptions(
         apiKey: 'key',
         transport: FakeTransport(),
+        storage: MemoryPugStorage(),
         logger: logger,
         autoTrack: false,
       ),
@@ -42,10 +44,10 @@ void main() {
     Pug.destroy();
   });
 
-  test('initPersistent uses shared preferences storage by default', () async {
+  test('init uses shared preferences storage by default', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
 
-    await Pug.initPersistent(
+    await Pug.init(
       'project',
       PugOptions(
         apiKey: 'key',
@@ -159,34 +161,37 @@ void main() {
     expect(value.length, 1024);
   });
 
-  test(
-    'session expires, rotate preserves device, reset rotates device and clears profile',
-    () {
-      final clock = FakeClock(1000);
-      final ids = SequenceIds();
-      final storage = MemoryPugStorage();
-      final client = testClient(clock: clock, ids: ids, storage: storage);
+  test('device id is stable across session rotation and changes on reset', () {
+    final clock = FakeClock(1000);
+    final ids = SequenceIds();
+    final storage = MemoryPugStorage();
+    final client = testClient(clock: clock, ids: ids, storage: storage);
 
-      client.track('first');
-      final first = client.queue.peekUnlocked().last;
+    client.track('first');
+    final first = client.queue.peekUnlocked().last;
+    final firstDevice = readDeviceId(storage);
+    expect(readSession(storage)['deviceId'], firstDevice);
 
-      clock.value = const Duration(minutes: 31).inMilliseconds + 1000;
-      client.track('second');
-      final second = client.queue.peekUnlocked().last;
-      expect(second.sessionId, isNot(first.sessionId));
+    clock.value = const Duration(minutes: 31).inMilliseconds + 1000;
+    client.track('second');
+    final second = client.queue.peekUnlocked().last;
+    expect(second.sessionId, isNot(first.sessionId));
+    expect(readDeviceId(storage), firstDevice);
+    expect(readSession(storage)['deviceId'], firstDevice);
 
-      final beforeRotateDevice = readSession(storage)['deviceId'];
-      client.rotate();
-      final afterRotate = readSession(storage);
-      expect(afterRotate['deviceId'], beforeRotateDevice);
+    client.rotate();
+    final afterRotate = readSession(storage);
+    expect(afterRotate['deviceId'], firstDevice);
+    expect(readDeviceId(storage), firstDevice);
 
-      client.identify('user-1');
-      client.reset();
-      final afterReset = readSession(storage);
-      expect(afterReset['deviceId'], isNot(beforeRotateDevice));
-      expect(storage.getString('__pug_project_external_id__'), isNull);
-    },
-  );
+    client.identify('user-1');
+    client.reset();
+    final afterReset = readSession(storage);
+    final resetDevice = readDeviceId(storage);
+    expect(resetDevice, isNot(firstDevice));
+    expect(afterReset['deviceId'], resetDevice);
+    expect(storage.getString('__pug_project_external_id__'), isNull);
+  });
 
   test(
     'identify first call includes anonymous id and later calls omit it',
@@ -415,6 +420,9 @@ Map<String, Object?> readSession(MemoryPugStorage storage) {
   }
   return typed;
 }
+
+String? readDeviceId(MemoryPugStorage storage) =>
+    storage.getString('__pug_project_device_id__');
 
 Event fakeEvent(String kind) {
   return Event(

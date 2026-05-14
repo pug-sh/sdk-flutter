@@ -26,8 +26,8 @@ make check        # protos + format + analyze + test
 
 `Pug` in `lib/src/pug.dart` is the singleton entry point:
 
-- `Pug.init(projectId, options)` initializes synchronously with caller-provided storage or memory fallback.
-- `Pug.initPersistent(projectId, options)` initializes asynchronously with `SharedPreferencesPugStorage` and enhanced mobile auto-properties by default.
+- `Pug.init(projectId, options)` initializes asynchronously with `SharedPreferencesPugStorage` and enhanced mobile auto-properties by default.
+- Persistence is opt-out: provide `storage: MemoryPugStorage()` or another custom `PugStorage` to override the default.
 - `Pug.track(kind, props:, options:)` is best-effort and must never throw.
 - `Pug.identify(externalId, traits:)` reports errors to the caller.
 - `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` manage identity/session/runtime state.
@@ -44,9 +44,9 @@ Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle
 
 `PugStorage` is synchronous by design so event/session/profile reads can happen inside `track()`.
 
-- `MemoryPugStorage` is the fallback.
+- `MemoryPugStorage` is the fallback and explicit persistence opt-out.
 - `SafePugStorage` wraps a primary store and switches to memory if persistence throws.
-- `SharedPreferencesPugStorage` provides default persistent storage for `Pug.initPersistent(...)`.
+- `SharedPreferencesPugStorage` provides default persistent storage for `Pug.init(...)`.
 
 State keys are project-namespaced:
 
@@ -81,7 +81,7 @@ Permanent HTTP failures drop events; transient failures roll back and retry late
 
 ### Auto Properties
 
-`PugAutoPropertyProvider` supplies auto-properties synchronously during event creation. `SystemPugAutoPropertyProvider.create(...)` preloads async platform metadata for `Pug.initPersistent(...)`; `Pug.init(...)` uses the synchronous system provider unless callers supply one.
+`PugAutoPropertyProvider` supplies auto-properties synchronously during event creation. `SystemPugAutoPropertyProvider.create(...)` preloads async platform metadata for `Pug.init(...)` unless callers supply one.
 
 Auto properties include `$projectId`, `$sdkVersion`, `$platform`, `$os`, `$osVersion`, `$locale`, `$timezone`, screen dimensions, app version/build/package where available, device manufacturer/model where available, and connectivity radio type where available.
 
@@ -108,7 +108,7 @@ Well-known event schemas are generated from `proto/common/v1/well_known_events.p
 
 ### Identity And Sessions
 
-Sessions are lazily resolved on event creation. Defaults match the web/mobile spec: 30 minute idle timeout and 1440 minute max duration. `rotate()` creates a new session while preserving device ID. `reset()` rotates both session and device identity and clears profile identity.
+Sessions are lazily resolved on event creation. Defaults match the web/mobile spec: 30 minute idle timeout and 1440 minute max duration. Device identity is stored separately from session state under a project-scoped device key. `rotate()` creates a new session while preserving device ID. `reset()` rotates both session and device identity and clears profile identity.
 
 Anonymous profile IDs are prefixed with `anon-`. The first successful `identify()` includes anonymous ID for backend merge semantics; subsequent identifies omit it.
 
@@ -157,7 +157,7 @@ Implemented parity:
 Flutter/mobile-specific parity:
 
 - App lifecycle auto tracking for `app_open` and `app_close`.
-- `SharedPreferencesPugStorage` via async `Pug.initPersistent(...)`.
+- `SharedPreferencesPugStorage` via async `Pug.init(...)`.
 - Built-in FCM provider through `pug_flutter_fcm.dart`.
 
 Remaining gaps:

@@ -47,7 +47,7 @@ Future<void> main() async {
 import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
 
 Future<void> configurePug() async {
-  await Pug.initPersistent(
+  await Pug.init(
     'project-id',
     const PugOptions(
       apiKey: 'pug_api_key',
@@ -60,7 +60,7 @@ Future<void> configurePug() async {
 Useful options:
 
 ```dart
-Pug.init(
+await Pug.init(
   'project-id',
   PugOptions(
     apiKey: 'pug_api_key',
@@ -81,7 +81,7 @@ Pug.init(
 );
 ```
 
-Use `Pug.init(...)` when you want to provide custom synchronous storage yourself. Use `Pug.initPersistent(...)` for default shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type.
+`Pug.init(...)` uses shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type by default. To opt out of persistence, provide `storage: MemoryPugStorage()` or another custom `PugStorage`.
 
 Repeated init calls are ignored with a warning. `track()` is best-effort and does not throw.
 
@@ -137,13 +137,16 @@ The first identify call includes the anonymous ID so the backend can merge anony
 
 ## Reset And Sessions
 
-Rotate only the session and keep the device identity:
+The SDK stores a project-scoped device ID separately from session state. That
+device ID is reused for session records, identify calls, and push registration.
+
+Rotate only the session and keep the same device ID:
 
 ```dart
 Pug.rotate();
 ```
 
-Clear profile identity and rotate both session and device identity:
+Clear profile identity and create a new device ID:
 
 ```dart
 Pug.reset();
@@ -232,7 +235,7 @@ For background handlers, initialize Firebase and Pug before tracking:
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  Pug.init(
+  await Pug.init(
     'project-id',
     const PugOptions(apiKey: 'pug_api_key'),
   );
@@ -269,7 +272,7 @@ class TestTransport implements PugTransport {
   Future<void> subscribeDevice(PushSubscription subscription) async {}
 }
 
-Pug.init(
+await Pug.init(
   'project-id',
   PugOptions(
     apiKey: 'test-key',

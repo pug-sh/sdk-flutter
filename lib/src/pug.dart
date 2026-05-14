@@ -17,16 +17,8 @@ class Pug {
 
   PugClient? get clientOrNull => _client;
 
-  static void init(String projectId, PugOptions options) {
-    _shared.initialize(projectId, options);
-  }
-
-  static Future<void> initPersistent(
-    String projectId,
-    PugOptions options,
-  ) async {
-    await _shared.initializePersistent(projectId, options);
-  }
+  static Future<void> init(String projectId, PugOptions options) =>
+      _shared.initialize(projectId, options);
 
   static void track(
     String kind, {
@@ -51,7 +43,7 @@ class Pug {
 
   static void destroy() => _shared.destroyClient();
 
-  void initialize(String projectId, PugOptions options) {
+  Future<void> initialize(String projectId, PugOptions options) async {
     if (projectId.trim().isEmpty) {
       throw const PugException('projectId is required.');
     }
@@ -62,31 +54,19 @@ class Pug {
       options.logger.warn('Pug is already initialized; repeated init ignored.');
       return;
     }
+    final resolvedOptions = options.copyWith(
+      storage: options.storage ?? await SharedPreferencesPugStorage.create(),
+      autoPropertyProvider:
+          options.autoPropertyProvider ??
+          await SystemPugAutoPropertyProvider.create(logger: options.logger),
+    );
     final client = PugClient(
       projectId: projectId,
-      options: options,
+      options: resolvedOptions,
       lifecycleBinding: WidgetsBinding.instance,
     );
     client.start();
     _client = client;
-  }
-
-  Future<void> initializePersistent(
-    String projectId,
-    PugOptions options,
-  ) async {
-    final storage =
-        options.storage ?? await SharedPreferencesPugStorage.create();
-    final autoPropertyProvider =
-        options.autoPropertyProvider ??
-        await SystemPugAutoPropertyProvider.create(logger: options.logger);
-    initialize(
-      projectId,
-      options.copyWith(
-        storage: storage,
-        autoPropertyProvider: autoPropertyProvider,
-      ),
-    );
   }
 
   void capture(

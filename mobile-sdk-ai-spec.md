@@ -161,6 +161,8 @@ Default implementations:
 
 - Android: `SharedPreferencesPugStorage`.
 - iOS: `UserDefaultsPugStorage`.
+- Persistent storage is the default. Callers opt out by supplying in-memory or
+  custom storage explicitly.
 - Provide in-memory fallback for restricted or failing persistence.
 
 ### Transport
@@ -277,6 +279,7 @@ Match web SDK behavior conceptually:
 - Persist under project-namespaced keys:
   - `__pug_<projectId>_session__`
   - `__pug_<projectId>_profile__`
+  - `__pug_<projectId>_device_id__`
   - `__pug_<projectId>_external_id__`
   - `__pug_<projectId>_queue__`
 - Session state should include:
@@ -286,6 +289,8 @@ Match web SDK behavior conceptually:
   - `deviceId`
 - `rotate()` creates a new session but preserves device ID.
 - `reset()` rotates both session and device identity and clears profile identity.
+- Device ID is a project-scoped SDK identity. Store it separately from session
+  state and copy it into session records when needed for payload compatibility.
 - Use app lifecycle hooks to track app foreground/background. Track `app_open`
   and `app_close` automatically if `autoTrack` is enabled.
 
