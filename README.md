@@ -85,6 +85,10 @@ await Pug.init(
 
 Repeated init calls are ignored with a warning. `track()` is best-effort and does not throw.
 
+When `autoTrack` is enabled, the SDK tracks `app_open` when the app is already
+resumed at init or later enters foreground. It tracks `app_close` when the app
+leaves foreground.
+
 ## Track Events
 
 ```dart

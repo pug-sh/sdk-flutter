@@ -78,6 +78,11 @@ class PugClient with WidgetsBindingObserver {
       throw const PugException('apiKey is required.');
     }
     _lifecycleBinding?.addObserver(this);
+    if (_options.autoTrack &&
+        _lifecycleBinding?.lifecycleState == AppLifecycleState.resumed) {
+      _isForeground = true;
+      track('app_open');
+    }
     _scheduleFlush();
   }
 

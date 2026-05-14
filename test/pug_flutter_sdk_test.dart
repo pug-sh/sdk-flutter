@@ -283,6 +283,33 @@ void main() {
     },
   );
 
+  test('auto tracking emits app open and close from lifecycle', () async {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final transport = FakeTransport();
+    final client = testClient(
+      transport: transport,
+      autoTrack: true,
+      lifecycleBinding: binding,
+    );
+
+    expect(client.queue.peekUnlocked().map((event) => event.kind), [
+      'app_open',
+    ]);
+
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(transport.sent.map((event) => event.kind), ['app_close']);
+    expect(transport.batches.single.map((event) => event.kind), ['app_open']);
+    expect(client.queue.peekUnlocked(), isEmpty);
+
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    expect(client.queue.peekUnlocked().map((event) => event.kind), [
+      'app_open',
+    ]);
+  });
+
   test('destroy starts a best-effort final flush', () async {
     final transport = FakeTransport();
     final client = testClient(transport: transport);
@@ -384,6 +411,8 @@ PugClient testClient({
   MemoryPugStorage? storage,
   PugLogger? logger,
   PugAutoPropertyProvider? autoPropertyProvider,
+  bool autoTrack = false,
+  WidgetsBinding? lifecycleBinding,
 }) {
   final client = PugClient(
     projectId: 'project',
@@ -394,11 +423,12 @@ PugClient testClient({
       logger: logger ?? const NoopPugLogger(),
       autoPropertyProvider:
           autoPropertyProvider ?? const PugStaticAutoPropertyProvider({}),
-      autoTrack: false,
+      autoTrack: autoTrack,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),
     clock: clock ?? FakeClock(1000),
     idGenerator: ids ?? SequenceIds(),
+    lifecycleBinding: lifecycleBinding,
   );
   client.start();
   addTearDown(client.destroy);
