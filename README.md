@@ -15,6 +15,8 @@ The SDK sends binary protobuf payloads to the Pug backend and keeps transport, s
 - Built-in Firebase Cloud Messaging provider.
 - Notification received, opened, and dismissed event helpers.
 - Injectable storage, transport, clock, ID generator, logger, and push provider for tests.
+- Well-known event constants and schema-aware validation for known event fields.
+- Shared-preferences-backed initialization with richer mobile auto-properties.
 
 ## Install
 
@@ -44,8 +46,8 @@ Future<void> main() async {
 ```dart
 import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
 
-void configurePug() {
-  Pug.init(
+Future<void> configurePug() async {
+  await Pug.initPersistent(
     'project-id',
     const PugOptions(
       apiKey: 'pug_api_key',
@@ -79,18 +81,19 @@ Pug.init(
 );
 ```
 
-Repeated `init()` calls are ignored with a warning. `track()` is best-effort and does not throw.
+Use `Pug.init(...)` when you want to provide custom synchronous storage yourself. Use `Pug.initPersistent(...)` for default shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type.
+
+Repeated init calls are ignored with a warning. `track()` is best-effort and does not throw.
 
 ## Track Events
 
 ```dart
 Pug.track(
-  'add_to_cart',
+  PugEventNames.addToCart,
   props: {
-    'sku': 'shirt-001',
-    'quantity': 2,
-    'price': 29.99,
-    'inStock': true,
+    'productId': 'shirt-001',
+    'amount': 29.99,
+    'currency': 'USD',
   },
 );
 ```
@@ -152,6 +155,12 @@ Release lifecycle observers and timers:
 Pug.destroy();
 ```
 
+Flush explicitly when the app has a known shutdown point:
+
+```dart
+await Pug.flush();
+```
+
 ## Push Registration
 
 Push support is provider-neutral. Any provider can implement `PushProvider`.
@@ -189,6 +198,8 @@ await PugPush.subscribe(
 Use `FcmPushProvider` for Firebase Cloud Messaging:
 
 ```dart
+import 'package:pug_flutter_sdk/pug_flutter_fcm.dart';
+
 final fcm = FcmPushProvider();
 
 await fcm.requestPermission();

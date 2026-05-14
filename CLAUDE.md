@@ -27,10 +27,10 @@ make check        # protos + format + analyze + test
 `Pug` in `lib/src/pug.dart` is the singleton entry point:
 
 - `Pug.init(projectId, options)` initializes synchronously with caller-provided storage or memory fallback.
-- `Pug.initPersistent(projectId, options)` initializes asynchronously with `SharedPreferencesPugStorage` by default.
+- `Pug.initPersistent(projectId, options)` initializes asynchronously with `SharedPreferencesPugStorage` and enhanced mobile auto-properties by default.
 - `Pug.track(kind, props:, options:)` is best-effort and must never throw.
 - `Pug.identify(externalId, traits:)` reports errors to the caller.
-- `Pug.reset()`, `Pug.rotate()`, and `Pug.destroy()` manage identity/session/runtime state.
+- `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` manage identity/session/runtime state.
 
 `PugPush` in `lib/src/push.dart` exposes provider-neutral push subscription, unsubscription, and notification event helpers.
 
@@ -79,6 +79,14 @@ RPC paths:
 
 Permanent HTTP failures drop events; transient failures roll back and retry later.
 
+### Auto Properties
+
+`PugAutoPropertyProvider` supplies auto-properties synchronously during event creation. `SystemPugAutoPropertyProvider.create(...)` preloads async platform metadata for `Pug.initPersistent(...)`; `Pug.init(...)` uses the synchronous system provider unless callers supply one.
+
+Auto properties include `$projectId`, `$sdkVersion`, `$platform`, `$os`, `$osVersion`, `$locale`, `$timezone`, screen dimensions, app version/build/package where available, device manufacturer/model where available, and connectivity radio type where available.
+
+Tests should prefer `PugStaticAutoPropertyProvider` to avoid platform plugin dependencies.
+
 ### Events
 
 `Event` and `PropertyValue` are SDK-internal Dart models converted to generated protobuf messages by `PugProtoCodec`.
@@ -106,7 +114,9 @@ Anonymous profile IDs are prefixed with `anon-`. The first successful `identify(
 
 ### Push
 
-Push is provider-neutral at the API level through `PushProvider`, but the package currently depends directly on `firebase_messaging` for the built-in `FcmPushProvider`. This differs from `../cotton-web-sdk`, where push is imported as an optional module and non-push users avoid push bundle cost.
+Push is provider-neutral at the API level through `PushProvider`. The core barrel `pug_flutter_sdk.dart` does not export FCM symbols; FCM users import `pug_flutter_fcm.dart`.
+
+The package still has a `firebase_messaging` dependency for the built-in provider. Full dependency-level optionality would require a separate package because Dart packages do not support optional dependencies.
 
 Notification helper events:
 
@@ -121,6 +131,8 @@ Notification payload sanitization keeps only flat strings, booleans, finite numb
 - `track()` must never throw or crash the host app.
 - `init()`, `identify()`, and push registration may report explicit failures.
 - Repeated init warns and no-ops.
+- Background lifecycle transitions should flush queued events even when `autoTrack` is disabled.
+- `destroy()` starts a best-effort final flush before disposing local runtime resources.
 - Keep generated protobuf code generated; update `.proto` files and run `make protos`.
 - Do not log API keys, push tokens, or full request payloads by default.
 - Prefer small injectable interfaces over hard-coded platform dependencies.
@@ -138,19 +150,20 @@ Implemented parity:
 - Well-known event names and schema-aware property mapping.
 - Provider-neutral push registration model.
 - Notification received/clicked/dismissed helpers.
+- Fuller mobile auto-properties through `PugAutoPropertyProvider`.
+- Explicit `Pug.flush()` and background/destroy best-effort flushes.
 - Dry run, sampling rate clamping, custom logger, injectable storage/transport/clock/ID generator.
 
 Flutter/mobile-specific parity:
 
 - App lifecycle auto tracking for `app_open` and `app_close`.
 - `SharedPreferencesPugStorage` via async `Pug.initPersistent(...)`.
-- Built-in FCM provider.
+- Built-in FCM provider through `pug_flutter_fcm.dart`.
 
 Remaining gaps:
 
-- Mobile auto-properties are still thinner than the mobile spec and web auto-properties. Current properties include `$projectId`, `$sdkVersion`, `$platform`, `$os`, `$osVersion`, `$locale`, and `$timezone`; pending work should add app version/build, device manufacturer/model, screen size, and network type where safe.
-- Lifecycle flush/destroy parity is incomplete. The SDK flushes on app close/background, but does not yet have a web-style beacon equivalent or a fully documented destroy-while-flushing recovery story.
-- Push packaging is not at web parity. Web keeps push optional/tree-shakeable; this Flutter package currently has `firebase_messaging` in the main dependency graph.
+- Flutter cannot implement web `sendBeacon`; shutdown flush is best-effort and relies on platform time to complete async work.
+- Push packaging is not fully at web dependency-level parity. The core barrel avoids FCM symbols, but the package still has `firebase_messaging` in the dependency graph.
 - Dart cannot match TypeScript's overloaded `TrackFn`/`WellKnownEventPropsMap` ergonomics directly. Current parity is constants plus runtime schema-aware validation.
 - No browser-style auto trackers for click, scroll, forms, rage click, dead click, page URL/referrer/title, UTM, or UA client hints. These are mostly web-specific and intentionally not implemented for mobile unless a future product requirement says otherwise.
 

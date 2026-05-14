@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'auto_properties.dart';
 import 'configuration.dart';
 import 'errors.dart';
 import 'runtime.dart';
@@ -46,6 +47,8 @@ class Pug {
 
   static void rotate() => _shared.rotateClient();
 
+  static Future<void> flush() => _shared.flushClient();
+
   static void destroy() => _shared.destroyClient();
 
   void initialize(String projectId, PugOptions options) {
@@ -74,7 +77,16 @@ class Pug {
   ) async {
     final storage =
         options.storage ?? await SharedPreferencesPugStorage.create();
-    initialize(projectId, options.copyWith(storage: storage));
+    final autoPropertyProvider =
+        options.autoPropertyProvider ??
+        await SystemPugAutoPropertyProvider.create(logger: options.logger);
+    initialize(
+      projectId,
+      options.copyWith(
+        storage: storage,
+        autoPropertyProvider: autoPropertyProvider,
+      ),
+    );
   }
 
   void capture(
@@ -99,6 +111,8 @@ class Pug {
   void resetClient() => _client?.reset();
 
   void rotateClient() => _client?.rotate();
+
+  Future<void> flushClient() async => _client?.flushAll();
 
   void destroyClient() {
     _client?.destroy();

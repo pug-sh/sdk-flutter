@@ -1,3 +1,4 @@
+import 'auto_properties.dart';
 import 'contracts.dart';
 
 class PugOptions {
@@ -12,6 +13,7 @@ class PugOptions {
     this.logger = const NoopPugLogger(),
     this.storage,
     this.transport,
+    this.autoPropertyProvider,
   });
 
   final String apiKey;
@@ -24,6 +26,7 @@ class PugOptions {
   final PugLogger logger;
   final PugStorage? storage;
   final PugTransport? transport;
+  final PugAutoPropertyProvider? autoPropertyProvider;
 
   PugOptions copyWith({
     String? apiKey,
@@ -36,6 +39,7 @@ class PugOptions {
     PugLogger? logger,
     PugStorage? storage,
     PugTransport? transport,
+    PugAutoPropertyProvider? autoPropertyProvider,
   }) {
     return PugOptions(
       apiKey: apiKey ?? this.apiKey,
@@ -48,6 +52,7 @@ class PugOptions {
       logger: logger ?? this.logger,
       storage: storage ?? this.storage,
       transport: transport ?? this.transport,
+      autoPropertyProvider: autoPropertyProvider ?? this.autoPropertyProvider,
     );
   }
 }

@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
+import 'package:pug_flutter_sdk/pug_flutter_fcm.dart';
 import 'package:pug_flutter_sdk/src/event_queue_storage.dart';
 import 'package:pug_flutter_sdk/src/runtime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,6 +90,31 @@ void main() {
     expect(event.customProperties['date']?.kind, 'timestampValue');
     expect(event.customProperties['json']?.kind, 'stringValue');
     expect(event.customProperties.containsKey('none'), isFalse);
+  });
+
+  test('auto property provider contributes mobile metadata', () {
+    final client = testClient(
+      autoPropertyProvider: const PugStaticAutoPropertyProvider({
+        r'$appVersion': '1.2.3',
+        r'$appBuild': '45',
+        r'$deviceManufacturer': 'Acme',
+        r'$deviceModel': 'Phone',
+        r'$screenWidth': 390,
+        r'$screenHeight': 844,
+        r'$networkType': 'wifi',
+      }),
+    );
+    client.track('signup');
+
+    final autoProperties = client.queue.peekUnlocked().single.autoProperties;
+    expect(autoProperties[r'$projectId']?.value, 'project');
+    expect(autoProperties[r'$appVersion']?.value, '1.2.3');
+    expect(autoProperties[r'$appBuild']?.value, '45');
+    expect(autoProperties[r'$deviceManufacturer']?.value, 'Acme');
+    expect(autoProperties[r'$deviceModel']?.value, 'Phone');
+    expect(autoProperties[r'$screenWidth']?.value, 390);
+    expect(autoProperties[r'$screenHeight']?.value, 844);
+    expect(autoProperties[r'$networkType']?.value, 'wifi');
   });
 
   test('well-known events validate known props and preserve schema types', () {
@@ -239,6 +264,33 @@ void main() {
   );
 
   test(
+    'lifecycle background flushes queued events even without auto tracking',
+    () async {
+      final transport = FakeTransport();
+      final client = testClient(transport: transport);
+
+      client.track('one');
+      client.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(transport.batches.single.map((event) => event.kind), ['one']);
+      expect(client.queue.peekUnlocked(), isEmpty);
+    },
+  );
+
+  test('destroy starts a best-effort final flush', () async {
+    final transport = FakeTransport();
+    final client = testClient(transport: transport);
+
+    client.track('one');
+    client.destroy();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(transport.batches.single.map((event) => event.kind), ['one']);
+    expect(client.queue.peekUnlocked(), isEmpty);
+  });
+
+  test(
     'push provider registration uses fake provider and current identity',
     () async {
       final transport = FakeTransport();
@@ -326,6 +378,7 @@ PugClient testClient({
   SequenceIds? ids,
   MemoryPugStorage? storage,
   PugLogger? logger,
+  PugAutoPropertyProvider? autoPropertyProvider,
 }) {
   final client = PugClient(
     projectId: 'project',
@@ -334,6 +387,8 @@ PugClient testClient({
       transport: transport ?? FakeTransport(),
       storage: storage ?? MemoryPugStorage(),
       logger: logger ?? const NoopPugLogger(),
+      autoPropertyProvider:
+          autoPropertyProvider ?? const PugStaticAutoPropertyProvider({}),
       autoTrack: false,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),

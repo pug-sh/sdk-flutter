@@ -20,19 +20,20 @@
   - Added `SharedPreferencesPugStorage`.
   - Added `Pug.initPersistent(...)` to initialize the SDK with shared preferences without changing the existing sync `Pug.init(...)` API.
 
-## Pending
+## Completed In Follow-Up
 
-- [ ] Add fuller mobile auto-properties.
+- [x] Add fuller mobile auto-properties.
   - Include app version/build, device manufacturer/model, screen size, and network type where available without sensitive permissions.
   - Keep existing `$projectId`, `$sdkVersion`, `$platform`, `$os`, `$osVersion`, `$locale`, and `$timezone`.
 
-- [ ] Improve lifecycle flush/destroy parity.
+- [x] Improve lifecycle flush/destroy parity.
   - Flush queued events on app background and destroy opportunities.
   - Keep events durable if a flush is in flight.
 
-- [ ] Revisit push packaging.
+- [x] Revisit push packaging.
   - Web keeps push optional for bundle size.
-  - Flutter core currently depends directly on `firebase_messaging`; split or document this if package structure permits.
+  - Core barrel no longer exports FCM symbols; FCM users import `pug_flutter_fcm.dart`.
+  - Full dependency-level optionality would require a separate package because Dart packages do not support optional dependencies.
 
-- [ ] Add docs/tests for each parity feature as it lands.
+- [x] Add docs/tests for each parity feature as it lands.
   - Keep tests focused on behavior shared with the web SDK and mobile-specific expectations from `mobile-sdk-ai-spec.md`.

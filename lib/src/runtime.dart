@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import 'auto_properties.dart';
 import 'clock_ids.dart';
 import 'configuration.dart';
 import 'contracts.dart';
@@ -29,6 +28,8 @@ class PugClient with WidgetsBindingObserver {
        _clock = clock ?? SystemPugClock(),
        _ids = idGenerator ?? UuidV7Generator(),
        _lifecycleBinding = lifecycleBinding,
+       _autoPropertyProvider =
+           options.autoPropertyProvider ?? SystemPugAutoPropertyProvider(),
        _storage = SafePugStorage(
          primary: options.storage,
          fallback: MemoryPugStorage(),
@@ -50,6 +51,7 @@ class PugClient with WidgetsBindingObserver {
   final PugClock _clock;
   final PugIdGenerator _ids;
   final WidgetsBinding? _lifecycleBinding;
+  final PugAutoPropertyProvider _autoPropertyProvider;
   final SafePugStorage _storage;
   late final PugTransport _transport;
   late final PugEventQueue _queue;
@@ -202,6 +204,16 @@ class PugClient with WidgetsBindingObserver {
     }
   }
 
+  Future<void> flushAll() async {
+    while (!_disposed && !_options.dryRun && _queue.size > 0) {
+      final before = _queue.size;
+      await flush();
+      if (_queue.size >= before) {
+        break;
+      }
+    }
+  }
+
   Future<void> subscribePush(
     PushProvider provider, {
     PushSubscribeOptions options = const PushSubscribeOptions(),
@@ -248,12 +260,9 @@ class PugClient with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!_options.autoTrack) {
-      return;
-    }
     switch (state) {
       case AppLifecycleState.resumed:
-        if (!_isForeground) {
+        if (_options.autoTrack && !_isForeground) {
           _isForeground = true;
           track('app_open');
         }
@@ -261,19 +270,20 @@ class PugClient with WidgetsBindingObserver {
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
-        if (_isForeground) {
+        if (_options.autoTrack && _isForeground) {
           _isForeground = false;
           track('app_close', options: const TrackOptions(immediate: true));
-          unawaited(flush());
         }
+        unawaited(flush());
     }
   }
 
   void destroy() {
-    _disposed = true;
     _flushTimer?.cancel();
+    unawaited(flushAll());
     _queue.dispose();
     _lifecycleBinding?.removeObserver(this);
+    _disposed = true;
   }
 
   Future<void> _sendImmediateOrQueue(Event event) async {
@@ -310,11 +320,7 @@ class PugClient with WidgetsBindingObserver {
     final autoProperties = mapper.mapProperties({
       r'$projectId': projectId,
       r'$sdkVersion': pugSdkVersion,
-      r'$platform': defaultTargetPlatform.name,
-      r'$os': Platform.operatingSystem,
-      r'$osVersion': Platform.operatingSystemVersion,
-      r'$locale': PlatformDispatcher.instance.locale.toLanguageTag(),
-      r'$timezone': DateTime.now().timeZoneName,
+      ..._autoPropertyProvider.properties(),
     });
     final now = _clock.nowMillis();
     final updatedSession = session.copyWith(lastActivityTime: now);
@@ -398,6 +404,9 @@ class PugClient with WidgetsBindingObserver {
   }
 
   void _scheduleFlush({bool withBackoff = false}) {
+    if (_disposed) {
+      return;
+    }
     _flushTimer?.cancel();
     final wait = withBackoff
         ? Duration(milliseconds: max(_options.batch.maxWaitMs, 1000) * 2)
@@ -426,6 +435,7 @@ PugOptions _normalizeOptions(PugOptions options) {
     logger: options.logger,
     storage: options.storage,
     transport: options.transport,
+    autoPropertyProvider: options.autoPropertyProvider,
   );
 }
 
