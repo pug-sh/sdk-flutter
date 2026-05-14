@@ -96,6 +96,7 @@ class SubscribeRequest extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   void clearPlatform() => $_clearField(2);
 
+  /// Optional — when provided, links the device to a profile.
   @$pb.TagNumber(3)
   $core.String get profileExternalId => $_getSZ(2);
   @$pb.TagNumber(3)
@@ -105,6 +106,7 @@ class SubscribeRequest extends $pb.GeneratedMessage {
   @$pb.TagNumber(3)
   void clearProfileExternalId() => $_clearField(3);
 
+  /// Optional — alternative to profile_external_id for linking.
   @$pb.TagNumber(4)
   $core.String get profileId => $_getSZ(3);
   @$pb.TagNumber(4)
@@ -379,6 +381,356 @@ class UpdateTokenResponse extends $pb.GeneratedMessage {
   static UpdateTokenResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<UpdateTokenResponse>(create);
   static UpdateTokenResponse? _defaultInstance;
+}
+
+enum DeviceOperationMessage_OperationPayload {
+  subscribe,
+  updateStatus,
+  updateToken,
+  notSet
+}
+
+class DeviceOperationMessage extends $pb.GeneratedMessage {
+  factory DeviceOperationMessage({
+    $core.String? deviceId,
+    $core.String? projectId,
+    SubscribePayload? subscribe,
+    UpdateStatusPayload? updateStatus,
+    UpdateTokenPayload? updateToken,
+  }) {
+    final result = create();
+    if (deviceId != null) result.deviceId = deviceId;
+    if (projectId != null) result.projectId = projectId;
+    if (subscribe != null) result.subscribe = subscribe;
+    if (updateStatus != null) result.updateStatus = updateStatus;
+    if (updateToken != null) result.updateToken = updateToken;
+    return result;
+  }
+
+  DeviceOperationMessage._();
+
+  factory DeviceOperationMessage.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DeviceOperationMessage.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static const $core.Map<$core.int, DeviceOperationMessage_OperationPayload>
+      _DeviceOperationMessage_OperationPayloadByTag = {
+    10: DeviceOperationMessage_OperationPayload.subscribe,
+    11: DeviceOperationMessage_OperationPayload.updateStatus,
+    12: DeviceOperationMessage_OperationPayload.updateToken,
+    0: DeviceOperationMessage_OperationPayload.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DeviceOperationMessage',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'sdk.devices.v1'),
+      createEmptyInstance: create)
+    ..oo(0, [10, 11, 12])
+    ..aOS(1, _omitFieldNames ? '' : 'deviceId')
+    ..aOS(2, _omitFieldNames ? '' : 'projectId')
+    ..aOM<SubscribePayload>(10, _omitFieldNames ? '' : 'subscribe',
+        subBuilder: SubscribePayload.create)
+    ..aOM<UpdateStatusPayload>(11, _omitFieldNames ? '' : 'updateStatus',
+        subBuilder: UpdateStatusPayload.create)
+    ..aOM<UpdateTokenPayload>(12, _omitFieldNames ? '' : 'updateToken',
+        subBuilder: UpdateTokenPayload.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeviceOperationMessage clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeviceOperationMessage copyWith(
+          void Function(DeviceOperationMessage) updates) =>
+      super.copyWith((message) => updates(message as DeviceOperationMessage))
+          as DeviceOperationMessage;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DeviceOperationMessage create() => DeviceOperationMessage._();
+  @$core.override
+  DeviceOperationMessage createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DeviceOperationMessage getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DeviceOperationMessage>(create);
+  static DeviceOperationMessage? _defaultInstance;
+
+  @$pb.TagNumber(10)
+  @$pb.TagNumber(11)
+  @$pb.TagNumber(12)
+  DeviceOperationMessage_OperationPayload whichOperationPayload() =>
+      _DeviceOperationMessage_OperationPayloadByTag[$_whichOneof(0)]!;
+  @$pb.TagNumber(10)
+  @$pb.TagNumber(11)
+  @$pb.TagNumber(12)
+  void clearOperationPayload() => $_clearField($_whichOneof(0));
+
+  @$pb.TagNumber(1)
+  $core.String get deviceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set deviceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasDeviceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearDeviceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get projectId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set projectId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProjectId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProjectId() => $_clearField(2);
+
+  @$pb.TagNumber(10)
+  SubscribePayload get subscribe => $_getN(2);
+  @$pb.TagNumber(10)
+  set subscribe(SubscribePayload value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasSubscribe() => $_has(2);
+  @$pb.TagNumber(10)
+  void clearSubscribe() => $_clearField(10);
+  @$pb.TagNumber(10)
+  SubscribePayload ensureSubscribe() => $_ensure(2);
+
+  @$pb.TagNumber(11)
+  UpdateStatusPayload get updateStatus => $_getN(3);
+  @$pb.TagNumber(11)
+  set updateStatus(UpdateStatusPayload value) => $_setField(11, value);
+  @$pb.TagNumber(11)
+  $core.bool hasUpdateStatus() => $_has(3);
+  @$pb.TagNumber(11)
+  void clearUpdateStatus() => $_clearField(11);
+  @$pb.TagNumber(11)
+  UpdateStatusPayload ensureUpdateStatus() => $_ensure(3);
+
+  @$pb.TagNumber(12)
+  UpdateTokenPayload get updateToken => $_getN(4);
+  @$pb.TagNumber(12)
+  set updateToken(UpdateTokenPayload value) => $_setField(12, value);
+  @$pb.TagNumber(12)
+  $core.bool hasUpdateToken() => $_has(4);
+  @$pb.TagNumber(12)
+  void clearUpdateToken() => $_clearField(12);
+  @$pb.TagNumber(12)
+  UpdateTokenPayload ensureUpdateToken() => $_ensure(4);
+}
+
+class SubscribePayload extends $pb.GeneratedMessage {
+  factory SubscribePayload({
+    $core.String? platform,
+    $core.String? profileExternalId,
+    $core.String? profileId,
+    $core.String? token,
+    $0.Struct? properties,
+  }) {
+    final result = create();
+    if (platform != null) result.platform = platform;
+    if (profileExternalId != null) result.profileExternalId = profileExternalId;
+    if (profileId != null) result.profileId = profileId;
+    if (token != null) result.token = token;
+    if (properties != null) result.properties = properties;
+    return result;
+  }
+
+  SubscribePayload._();
+
+  factory SubscribePayload.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SubscribePayload.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SubscribePayload',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'sdk.devices.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'platform')
+    ..aOS(2, _omitFieldNames ? '' : 'profileExternalId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aOS(4, _omitFieldNames ? '' : 'token')
+    ..aOM<$0.Struct>(5, _omitFieldNames ? '' : 'properties',
+        subBuilder: $0.Struct.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubscribePayload clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubscribePayload copyWith(void Function(SubscribePayload) updates) =>
+      super.copyWith((message) => updates(message as SubscribePayload))
+          as SubscribePayload;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SubscribePayload create() => SubscribePayload._();
+  @$core.override
+  SubscribePayload createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SubscribePayload getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SubscribePayload>(create);
+  static SubscribePayload? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get platform => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set platform($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPlatform() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPlatform() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileExternalId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileExternalId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileExternalId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileExternalId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get token => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set token($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasToken() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearToken() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $0.Struct get properties => $_getN(4);
+  @$pb.TagNumber(5)
+  set properties($0.Struct value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasProperties() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearProperties() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $0.Struct ensureProperties() => $_ensure(4);
+}
+
+class UpdateStatusPayload extends $pb.GeneratedMessage {
+  factory UpdateStatusPayload({
+    $core.String? status,
+  }) {
+    final result = create();
+    if (status != null) result.status = status;
+    return result;
+  }
+
+  UpdateStatusPayload._();
+
+  factory UpdateStatusPayload.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UpdateStatusPayload.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UpdateStatusPayload',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'sdk.devices.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'status')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateStatusPayload clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateStatusPayload copyWith(void Function(UpdateStatusPayload) updates) =>
+      super.copyWith((message) => updates(message as UpdateStatusPayload))
+          as UpdateStatusPayload;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UpdateStatusPayload create() => UpdateStatusPayload._();
+  @$core.override
+  UpdateStatusPayload createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UpdateStatusPayload getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UpdateStatusPayload>(create);
+  static UpdateStatusPayload? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get status => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set status($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasStatus() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearStatus() => $_clearField(1);
+}
+
+class UpdateTokenPayload extends $pb.GeneratedMessage {
+  factory UpdateTokenPayload({
+    $core.String? token,
+  }) {
+    final result = create();
+    if (token != null) result.token = token;
+    return result;
+  }
+
+  UpdateTokenPayload._();
+
+  factory UpdateTokenPayload.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UpdateTokenPayload.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UpdateTokenPayload',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'sdk.devices.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'token')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateTokenPayload clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateTokenPayload copyWith(void Function(UpdateTokenPayload) updates) =>
+      super.copyWith((message) => updates(message as UpdateTokenPayload))
+          as UpdateTokenPayload;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UpdateTokenPayload create() => UpdateTokenPayload._();
+  @$core.override
+  UpdateTokenPayload createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UpdateTokenPayload getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UpdateTokenPayload>(create);
+  static UpdateTokenPayload? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get token => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set token($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasToken() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearToken() => $_clearField(1);
 }
 
 class DevicesServiceApi {

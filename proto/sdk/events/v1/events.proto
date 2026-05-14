@@ -1,16 +1,18 @@
-syntax = "proto3";
-
+edition = "2023";
 package sdk.events.v1;
 
+import "buf/validate/validate.proto";
 import "common/v1/property_value.proto";
 import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/pug-sh/pug/internal/gen/proto/sdk/events/v1;eventsv1";
 
 service EventsService {
   rpc BatchCreate(BatchCreateRequest) returns (BatchCreateResponse);
 }
 
 message BatchCreateRequest {
-  repeated Event events = 1;
+  repeated Event events = 1 [(buf.validate.field).repeated.max_items = 1000];
 }
 
 message BatchCreateResponse {
@@ -18,16 +20,41 @@ message BatchCreateResponse {
 }
 
 message Event {
-  string event_id = 1;
-  map<string, common.v1.PropertyValue> auto_properties = 2;
+  option (buf.validate.message).cel = {
+    id: "event.kind_no_reserved_prefix"
+    message: "event kind must not use reserved prefix 'pug.'"
+    expression: "!this.kind.startsWith('pug.')"
+  };
+  option (buf.validate.message).cel = {
+    id: "event.auto_properties_dollar_prefix"
+    message: "auto_properties keys must start with '$'"
+    expression: "this.auto_properties.all(key, key.startsWith('$'))"
+  };
+  option (buf.validate.message).cel = {
+    id: "event.custom_properties_no_dollar_prefix"
+    message: "custom_properties keys must not start with '$' (reserved for auto-properties)"
+    expression: "this.custom_properties.all(key, !key.startsWith('$'))"
+  };
+
+  string event_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
+  map<string, common.v1.PropertyValue> auto_properties   = 2;
   map<string, common.v1.PropertyValue> custom_properties = 3;
-  string distinct_id = 4;
-  string kind = 5;
-  google.protobuf.Timestamp occur_time = 6;
-  string session_id = 7;
+  string distinct_id = 4 [(buf.validate.field).required = true];
+  string kind = 5 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp occur_time = 6 [(buf.validate.field).required = true];
+  string session_id = 7 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
 }
 
 message EventBatch {
   repeated Event events = 1;
-  string project_id = 2;
+  string project_id = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
 }

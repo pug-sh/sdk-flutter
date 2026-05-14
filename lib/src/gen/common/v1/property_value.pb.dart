@@ -28,6 +28,14 @@ enum PropertyValue_Value {
   notSet
 }
 
+/// PropertyValue is the typed value of an event property.
+/// Exactly one variant must be set; this is enforced by the protovalidate
+/// oneof.required option below.
+///
+/// Lists, objects, and other compound types are intentionally not included
+/// in this iteration — only the five primitive types supported by the
+/// ClickHouse Variant storage target. New variants can be added later as
+/// additive oneof entries (wire-compatible).
 class PropertyValue extends $pb.GeneratedMessage {
   factory PropertyValue({
     $core.String? stringValue,
@@ -109,6 +117,19 @@ class PropertyValue extends $pb.GeneratedMessage {
   @$pb.TagNumber(5)
   void clearValue() => $_clearField($_whichOneof(0));
 
+  /// Cap property string values at 1024 Unicode codepoints. Large blobs
+  /// (logs, raw payloads, serialized JSON) should be hashed or referenced
+  /// upstream rather than embedded as a property value. Note: max_len
+  /// counts codepoints, not bytes — multi-byte UTF-8 (emoji, CJK) can
+  /// exceed 1 KiB on the wire at this limit. Switch to max_bytes if a
+  /// hard byte cap is required. Values exceeding the limit are rejected
+  /// at the validate interceptor with CodeInvalidArgument (not truncated).
+  ///
+  /// Empty-string note: the filter expression cannot distinguish a
+  /// custom_properties value of "" from an absent key — both project to ''
+  /// in propertyExpr (filters.go), so EQUALS '' and IS_NOT_SET match
+  /// identically. If the empty case is meaningful, encode it differently
+  /// (e.g. a sentinel value) on the producer side.
   @$pb.TagNumber(1)
   $core.String get stringValue => $_getSZ(0);
   @$pb.TagNumber(1)
@@ -145,6 +166,9 @@ class PropertyValue extends $pb.GeneratedMessage {
   @$pb.TagNumber(4)
   void clearBoolValue() => $_clearField(4);
 
+  /// Stored as a DateTime64(3) Variant slot. Sub-millisecond precision is
+  /// truncated by ClickHouse on insert to match the slot's precision; no
+  /// Go-side truncation is performed in the worker.
   @$pb.TagNumber(5)
   $0.Timestamp get timestampValue => $_getN(4);
   @$pb.TagNumber(5)

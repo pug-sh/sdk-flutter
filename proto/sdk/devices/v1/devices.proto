@@ -1,36 +1,107 @@
-syntax = "proto3";
-
+edition = "2023";
 package sdk.devices.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 
+option go_package = "github.com/pug-sh/pug/internal/gen/proto/sdk/devices/v1;devicesv1";
+
 service DevicesService {
-  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
-  rpc UpdateStatus(UpdateStatusRequest) returns (UpdateStatusResponse);
-  rpc UpdateToken(UpdateTokenRequest) returns (UpdateTokenResponse);
+  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse) {}
+  rpc UpdateStatus(UpdateStatusRequest) returns (UpdateStatusResponse) {}
+  rpc UpdateToken(UpdateTokenRequest) returns (UpdateTokenResponse) {}
 }
 
 message SubscribeRequest {
-  string device_id = 1;
-  string platform = 2;
-  string profile_external_id = 3;
-  string profile_id = 4;
-  string token = 5;
+  option (buf.validate.message).cel = {
+    id: "profile_id_or_external_id",
+    message: "at most one of profile_id or profile_external_id may be set",
+    expression: "this.profile_id == '' || this.profile_external_id == ''"
+  };
+
+  string device_id = 1 [(buf.validate.field).required = true, (buf.validate.field).string = {max_len: 36}];
+  string platform = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      in: [
+        "android",
+        "ios",
+        "web"
+      ]
+    }
+  ];
+  // Optional — when provided, links the device to a profile.
+  string profile_external_id = 3 [(buf.validate.field).string = {max_len: 255}];
+  // Optional — alternative to profile_external_id for linking.
+  string profile_id = 4 [(buf.validate.field).string = {max_len: 20}];
+  string token = 5 [(buf.validate.field).required = true];
   google.protobuf.Struct properties = 6;
 }
 
 message SubscribeResponse {}
 
 message UpdateStatusRequest {
-  string id = 1;
-  string status = 2;
+  string id = 1 [(buf.validate.field).required = true, (buf.validate.field).string = {max_len: 36}];
+  string status = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      in: [
+        "active",
+        "inactive"
+      ]
+    }
+  ];
 }
 
 message UpdateStatusResponse {}
 
 message UpdateTokenRequest {
-  string id = 1;
-  string token = 2;
+  string id = 1 [(buf.validate.field).required = true, (buf.validate.field).string = {max_len: 36}];
+  string token = 2 [(buf.validate.field).required = true];
 }
 
 message UpdateTokenResponse {}
+
+message DeviceOperationMessage {
+  string device_id = 1 [(buf.validate.field).required = true, (buf.validate.field).string = {max_len: 36}];
+  string project_id = 2 [(buf.validate.field).required = true];
+
+  oneof operation_payload {
+    SubscribePayload subscribe = 10;
+    UpdateStatusPayload update_status = 11;
+    UpdateTokenPayload update_token = 12;
+  }
+}
+
+message SubscribePayload {
+  string platform = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      in: [
+        "android",
+        "ios",
+        "web"
+      ]
+    }
+  ];
+  string profile_external_id = 2;
+  string profile_id = 3;
+  string token = 4 [(buf.validate.field).required = true];
+  google.protobuf.Struct properties = 5;
+}
+
+message UpdateStatusPayload {
+  string status = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      in: [
+        "active",
+        "inactive"
+      ]
+    }
+  ];
+}
+
+message UpdateTokenPayload {
+  string token = 1 [(buf.validate.field).required = true];
+}

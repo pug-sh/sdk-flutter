@@ -1,18 +1,50 @@
-syntax = "proto3";
-
+edition = "2023";
 package sdk.profiles.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 
+option go_package = "github.com/pug-sh/pug/internal/gen/proto/sdk/profiles/v1;sdkprofilesv1";
+
 service ProfilesSDKService {
+  // Identify creates or updates a profile by external_id. When anonymous_id
+  // is provided, the anonymous profile is merged into the identified one
+  // (properties, devices) and then soft-deleted.
   rpc Identify(IdentifyRequest) returns (IdentifyResponse);
 }
 
 message IdentifyRequest {
-  string external_id = 1;
+  // Stable user identifier (e.g. email, database ID).
+  string external_id = 1 [(buf.validate.field).required = true];
+  // Profile properties — shallow-merged into existing properties. On key conflict,
+  // these values take precedence over previously stored values.
   google.protobuf.Struct traits = 2;
-  string anonymous_id = 3;
-  string device_id = 4;
+  // The SDK-generated anonymous ID. The SDK should send this on first identify
+  // to trigger merge-and-soft-delete of the anonymous profile. Must start with "anon-".
+  string anonymous_id = 3 [(buf.validate.field).string = {
+    max_len: 255,
+    pattern: "^$|^anon-"
+  }];
+  // The device to assign to this profile. The SDK should send this on first
+  // identify and on account switch (external_id changed) — not on every call,
+  // to avoid unnecessary DB writes. Omit for web SDKs without push support.
+  string device_id = 4 [(buf.validate.field).string = {max_len: 36}];
 }
 
 message IdentifyResponse {}
+
+// ProfileIdentifyMessage is the internal NATS envelope for the identify worker.
+// project_id is injected server-side from the authenticated principal.
+message ProfileIdentifyMessage {
+  string external_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  google.protobuf.Struct traits = 2;
+  string project_id = 3 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  string anonymous_id = 4;
+  string device_id = 5;
+}
