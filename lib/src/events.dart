@@ -118,32 +118,7 @@ class PropertyMapper {
     String kind,
     Map<String, Object?> properties,
   ) {
-    final schema = wellKnownEventSchemas[kind];
-    if (schema == null) {
-      return mapProperties(properties);
-    }
-
-    final mapped = <String, PropertyValue>{};
-    for (final entry in properties.entries) {
-      final field = schema.fields[entry.key];
-      if (field == null) {
-        final value = _mapValue(entry.value);
-        if (value != null) {
-          mapped[entry.key] = value;
-        }
-        continue;
-      }
-
-      final value = _mapKnownValue(entry.value, field);
-      if (value == null) {
-        logger.error(
-          'Pug dropped "$kind": property "${entry.key}" must be ${field.type.description}.',
-        );
-        return null;
-      }
-      mapped[entry.key] = value;
-    }
-    return mapped;
+    return mapProperties(properties);
   }
 
   PropertyValue? _mapValue(Object? value) {
@@ -192,26 +167,6 @@ class PropertyMapper {
       logger.debug(stackTrace.toString());
       return _dropUnsupported(value);
     }
-  }
-
-  PropertyValue? _mapKnownValue(Object? value, WellKnownPropertyField field) {
-    if (value == null) {
-      return null;
-    }
-    return switch (field.type) {
-      WellKnownPropertyType.string =>
-        value is String
-            ? PropertyValue.string(_truncateUtf8(value, 1024))
-            : null,
-      WellKnownPropertyType.int32 =>
-        value is int ? PropertyValue.int(value) : null,
-      WellKnownPropertyType.double =>
-        value is num && value.isFinite
-            ? PropertyValue.double(value.toDouble())
-            : null,
-      WellKnownPropertyType.bool =>
-        value is bool ? PropertyValue.bool(value) : null,
-    };
   }
 
   PropertyValue? _dropUnsupported(Object value) {

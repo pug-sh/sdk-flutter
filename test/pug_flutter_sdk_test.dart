@@ -207,7 +207,7 @@ void main() {
     expect(autoProperties[r'$utmContent']?.value, 'hero');
   });
 
-  test('well-known events validate known props and preserve schema types', () {
+  test('well-known events accept any props without validation', () {
     final logger = CapturingLogger();
     final client = testClient(logger: logger);
 
@@ -222,13 +222,12 @@ void main() {
     );
     final purchase = client.queue.peekUnlocked().single;
     expect(purchase.customProperties['productId']?.kind, 'stringValue');
-    expect(purchase.customProperties['amount']?.kind, 'doubleValue');
-    expect(purchase.customProperties['amount']?.value, 3.0);
+    expect(purchase.customProperties['amount']?.kind, 'intValue');
+    expect(purchase.customProperties['amount']?.value, 3);
     expect(purchase.customProperties['extra']?.kind, 'boolValue');
 
     client.track('purchase', props: {'amount': '3.00'});
-    expect(client.queue.peekUnlocked().length, 1);
-    expect(logger.errors, contains(contains('property "amount" must be')));
+    expect(client.queue.peekUnlocked().length, 2);
 
     client.track('scroll', props: {'percent': 0, 'scrollY': 0});
     final scroll = client.queue.peekUnlocked().last;
