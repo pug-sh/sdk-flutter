@@ -18,7 +18,7 @@
 
 - [x] Add out-of-the-box persistent Flutter storage.
   - Added `SharedPreferencesPugStorage`.
-  - Added `Pug.initPersistent(...)` to initialize the SDK with shared preferences without changing the existing sync `Pug.init(...)` API.
+  - `Pug.init(...)` is async and defaults to shared-preferences storage; persistence is opt-out via `storage: MemoryPugStorage()` or another custom `PugStorage`.
 
 ## Completed In Follow-Up
 
