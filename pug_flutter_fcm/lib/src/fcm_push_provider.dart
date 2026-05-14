@@ -1,8 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-
-import 'contracts.dart';
-import 'push_models.dart';
+import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
 
 typedef FcmTokenGetter = Future<String?> Function();
 typedef FcmTokenDeleter = Future<void> Function();
@@ -146,5 +144,6 @@ class FcmPushProvider implements PushProvider {
         showPreviews: AppleShowPreviewSetting.notSupported,
         timeSensitive: AppleNotificationSetting.notSupported,
         sound: AppleNotificationSetting.notSupported,
+        providesAppNotificationSettings: AppleNotificationSetting.notSupported,
       );
 }

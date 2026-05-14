@@ -315,7 +315,7 @@ Notification event names align:
 
 Both SDKs default missing `campaignId` on notification clicks to `(unknown)`. Notification payloads are sanitized to flat strings, booleans, finite numbers, and timestamps.
 
-**Parity status:** Mobile equivalent, and ahead in surface area — the web SDK ships only the click helper, while Flutter ships received/clicked/dismissed. Dependency-level optionality is partial because the Flutter package still depends on `firebase_messaging`; a separate FCM package would be needed for full optionality.
+**Parity status:** Mobile equivalent, and ahead in surface area — the web SDK ships only the click helper, while Flutter ships received/clicked/dismissed. Dependency-level optionality is complete because the FCM provider has been moved to the separate `pug_flutter_fcm` package.
 
 ## Wire Validation
 
@@ -363,7 +363,7 @@ Severity: **High** = changes analytics correctness/coverage; **Medium** = DX or 
 | 5   | Compile-time typed event props                                                          | `WellKnownEventPropsMap` + overloaded `TrackFn`   | Runtime schema validation only                                                                 | Low (Dart language limit)                 |
 | 6   | DOM interaction auto-trackers (`click`, `scroll`, `form_*`, `rage_click`, `dead_click`) | 5 auto-trackers installed by `autoTrack`          | Schemas exist, no trackers                                                                     | Low (DOM-specific, intentionally omitted) |
 | 7   | Hard delivery guarantee on app kill                                                     | `navigator.sendBeacon` on `pagehide`              | Best-effort `flushAll()` only; no synchronous-beacon equivalent                                | Low (platform limit)                      |
-| 8   | Package-level FCM optionality                                                           | Push is tree-shakeable and optional               | Core barrel avoids FCM exports, but `firebase_messaging` stays in the dependency graph         | Low–Medium                                |
+| 8   | Package-level FCM optionality                                                           | Push is tree-shakeable and optional               | Dependency-level optionality achieved via separate `pug_flutter_fcm` package.                  | Closed (Low-Medium)                       |
 
 ## Compatibility Notes
 

@@ -123,9 +123,7 @@ Anonymous profile IDs are prefixed with `anon-`. The first successful `identify(
 
 ### Push
 
-Push is provider-neutral at the API level through `PushProvider`. The core barrel `pug_flutter_sdk.dart` does not export FCM symbols; FCM users import `pug_flutter_fcm.dart`.
-
-The package still has a `firebase_messaging` dependency for the built-in provider. Full dependency-level optionality would require a separate package because Dart packages do not support optional dependencies.
+Push is provider-neutral at the API level through `PushProvider`. The FCM implementation is provided in a separate add-on package, `pug_flutter_fcm`. To use FCM, users must depend on both `pug_flutter_sdk` and `pug_flutter_fcm`, achieving full dependency-level optionality.
 
 Notification helper events:
 
@@ -172,8 +170,7 @@ Flutter/mobile-specific parity:
 
 Remaining gaps:
 
-- Flutter cannot implement web `sendBeacon`; shutdown flush is best-effort and relies on platform time to complete async work.
-- Push packaging is not fully at web dependency-level parity. The core barrel avoids FCM symbols, but the package still has `firebase_messaging` in the dependency graph.
+- Push packaging is at full web dependency-level parity, with the FCM provider isolated in the separate `pug_flutter_fcm` package.
 - Dart cannot match TypeScript's overloaded `TrackFn`/`WellKnownEventPropsMap` ergonomics directly. Current parity is constants plus runtime schema-aware validation.
 - No browser-style auto trackers for click, scroll, forms, rage click, dead click, page URL/referrer/title, or UA client hints. UTM-style campaign capture is implemented from app/deep links, but this SDK does not capture install referrer/deferred attribution automatically.
 
