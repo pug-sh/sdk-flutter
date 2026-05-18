@@ -5,8 +5,7 @@
 - [x] Generate and use well-known event proto definitions.
   - Add `common/v1/well_known_events.proto`.
   - Run `make protos`.
-  - Validate well-known event properties before enqueueing.
-  - Preserve schema scalar types for known fields, while accepting extra properties.
+  - Mirror well-known event names in Dart.
 
 - [x] Improve in-flight queue durability semantics.
   - Exclude locked events from queue `size`.
@@ -32,8 +31,7 @@
 
 - [x] Revisit push packaging.
   - Web keeps push optional for bundle size.
-  - Core barrel no longer exports FCM symbols; FCM users import `pug_flutter_fcm.dart`.
-  - Full dependency-level optionality would require a separate package because Dart packages do not support optional dependencies.
+  - Package-level optionality is now achieved by moving FCM support to the separate `pug_flutter_fcm` package.
 
 - [x] Add docs/tests for each parity feature as it lands.
   - Keep tests focused on behavior shared with the web SDK and mobile-specific expectations from `mobile-sdk-ai-spec.md`.
@@ -41,5 +39,19 @@
 - [x] Add auto page view tracking.
   - Added `autoPageViews` option (default: true).
   - Added `PugRouteObserver` that tracks `page_view` events on route changes.
-  - Added `$url` and `$referrer` properties to page_view events.
-  - Host apps must register `Pug.routeObserver` with their Navigator.
+  - Added `url` and `referrer` properties to `page_view` events.
+  - Host apps must register `PugRouteObserver()` with their Navigator.
+
+## Remaining Gaps
+
+- [ ] Add real well-known event validation parity.
+  - `PropertyMapper.mapEventProperties(...)` currently does loose property mapping only.
+  - Flutter does not yet enforce schema field types/required fields/ranges the way the web SDK does.
+
+- [ ] Add wire-level request validation parity.
+  - Flutter does not client-validate full `Event`, `IdentifyRequest`, or `SubscribeRequest` payloads before send.
+  - Invalid payloads are still rejected server-side, but parity with the web SDK is not complete.
+
+- [ ] Align `identify()` device-linking semantics with web/backend guidance.
+  - Web sends `deviceId` on first identify only.
+  - Flutter currently sends `deviceId` on every identify call.
