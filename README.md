@@ -18,7 +18,7 @@ Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`.
 - Automatic campaign capture from app links and deep links.
 - Notification received, opened, and dismissed event helpers.
 - Injectable storage, transport, clock, ID generator, logger, and push provider for tests.
-- Well-known event constants and schema-aware validation for known event fields.
+- Well-known event constants for the shared event catalog.
 - Shared-preferences-backed initialization with richer mobile auto-properties.
 
 ## Install
@@ -148,6 +148,29 @@ Pug.track(
 );
 ```
 
+Use the same `Pug.track(...)` API for both custom events and well-known events.
+The difference is the event name you pass:
+
+- Custom events use any string name, such as `'checkout_step_viewed'`.
+- Well-known events use `PugEventNames.*` constants, such as `PugEventNames.addToCart`.
+
+### Custom Events
+
+Custom events can use any event name and any supported property values:
+
+```dart
+Pug.track('checkout_step_viewed');
+
+Pug.track(
+  'checkout_step_viewed',
+  props: {
+    'step': 'shipping',
+    'cartValue': 84.50,
+    'hasCoupon': true,
+  },
+);
+```
+
 Send immediately when the event is important. If the immediate send fails with a transient error, the event is queued for retry.
 
 ```dart
@@ -161,6 +184,58 @@ Pug.track(
 );
 ```
 
+You can also provide an explicit timestamp:
+
+```dart
+Pug.track(
+  'video_buffered',
+  props: {
+    'videoId': 'intro-123',
+    'durationMs': 900,
+  },
+  options: TrackOptions(
+    timestampMillis: DateTime.now().millisecondsSinceEpoch,
+  ),
+);
+```
+
+### Well-Known Events
+
+Well-known events use exported constants from `PugEventNames`:
+
+```dart
+Pug.track(PugEventNames.signup);
+
+Pug.track(
+  PugEventNames.search,
+  props: {
+    'query': 'running shoes',
+  },
+);
+
+Pug.track(
+  PugEventNames.notificationClicked,
+  props: {
+    'campaignId': 'spring-sale',
+    'notificationType': 'promo',
+  },
+);
+```
+
+Well-known events can still include extra custom properties:
+
+```dart
+Pug.track(
+  PugEventNames.purchase,
+  props: {
+    'productId': 'sku-123',
+    'amount': 49.0,
+    'currency': 'USD',
+    'orderId': 'ord-1001',
+  },
+);
+```
+
 Property values supported by the SDK:
 
 - `String`
@@ -170,6 +245,34 @@ Property values supported by the SDK:
 - maps and lists that can be JSON encoded
 
 Unsupported or non-finite values are dropped.
+
+Well-known event names such as `PugEventNames.addToCart`, `PugEventNames.pageView`,
+and `PugEventNames.notificationClicked` are exported as constants. Flutter does
+not currently enforce schema-aware validation for those event properties in the
+SDK; invalid payloads are rejected server-side.
+
+### Editor Support
+
+The current editor experience is:
+
+- Event name autocomplete: yes, via `PugEventNames.*`
+- Event property autocomplete/type safety: no
+
+`props` is still `Map<String, Object?>`, so the editor does not currently give
+per-event property hints, required-field enforcement, or value-type checking for
+well-known event properties.
+
+For example, this compiles even though the payload shape is wrong for the shared
+well-known schema:
+
+```dart
+Pug.track(
+  PugEventNames.purchase,
+  props: {
+    'amount': '49.00',
+  },
+);
+```
 
 ## Identify Users
 
@@ -251,7 +354,7 @@ await PugPush.subscribe(
 Use `FcmPushProvider` for Firebase Cloud Messaging:
 
 ```dart
-import 'package:pug_flutter_sdk/pug_flutter_fcm.dart';
+import 'package:pug_flutter_fcm/pug_flutter_fcm.dart';
 
 final fcm = FcmPushProvider();
 

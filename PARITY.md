@@ -20,7 +20,7 @@ The goal is product-semantic parity where it makes sense for mobile. Browser-onl
 | Transport                   | Connect-compatible protobuf HTTP                            | Connect-compatible protobuf HTTP                                             | Complete                    |
 | API key transport           | `x-api-key`; beacon uses query param                        | `x-api-key`                                                                  | Complete for normal HTTP    |
 | Shutdown delivery           | `sendBeacon` on unload                                      | Best-effort async flush on background/destroy                                | Mobile equivalent           |
-| Well-known events           | 24 names, generated schemas + TS type overloads             | 24 names, generated schemas + `PugEventNames` constants                      | Partial                     |
+| Well-known events           | 21 names typed/validated at runtime                         | 24 names mirrored in schemas + `PugEventNames` constants                     | Flutter ahead, validation gap remains |
 | Property mapping            | Typed protobuf values, schema-aware known props             | Typed protobuf values, loose property mapping                                | Partial                     |
 | Wire validation             | Client-side request validation                              | No full client-side request validation                                       | Partial                     |
 | Sampling                    | `samplingRate` clamped at init, not yet enforced            | `samplingRate` enforced per event                                            | Flutter ahead               |
@@ -63,7 +63,7 @@ The goal is product-semantic parity where it makes sense for mobile. Browser-onl
 
 `lib/src/push.dart` exposes provider-neutral push helpers through `PugPush`.
 
-**Parity note:** Dart cannot match TypeScript's overloaded `TrackFn` and `WellKnownEventPropsMap` ergonomics directly. Flutter currently exposes `PugEventNames` constants, but not typed prop overloads.
+**Parity note:** Dart cannot match TypeScript's overloaded `TrackFn` and `WellKnownEventPropsMap` ergonomics directly. Flutter exposes `PugEventNames` constants, but not typed prop overloads. Also, the current web SDK code only types and validates 21 well-known event names in `src/well-known-events.ts`, while Flutter mirrors 24 names from `lib/src/events.dart`.
 
 ## Initialization And Lifecycle
 
@@ -77,10 +77,11 @@ Flutter `Pug.init()` asynchronously prepares shared-preferences storage and syst
 
 Both SDKs build protobuf `sdk.events.v1.Event` payloads with event ID, kind, session ID, distinct ID, occurrence time, custom properties, and auto-properties.
 
-Important difference:
+Important differences:
 
-- Web validates well-known events against generated schemas and preserves schema scalar types for known fields.
+- Web validates 21 well-known events against generated schemas and preserves schema scalar types for known fields.
 - Flutter currently does not validate well-known events against the mirrored schema registry. `PropertyMapper.mapEventProperties(...)` delegates directly to loose `mapProperties(...)`, so known-field type rules, required fields, and range constraints are not enforced client-side.
+- Flutter currently treats three names as well-known that the web SDK does not yet type/validate in code: `checkout_completed`, `login`, and `logout`.
 
 Strings are truncated to 1024 UTF-8 bytes in Flutter. The shared proto limit is 1024 codepoints, so Flutter is conservative but not byte-for-byte identical to web behavior.
 
@@ -243,17 +244,29 @@ The core package is provider-neutral. FCM support now lives in the separate `pug
 
 **Parity status:** Mobile equivalent, and ahead in helper surface area.
 
+## Well-Known Event Catalog Drift
+
+The sibling web SDK's README lists 24 well-known events, but the current code in `../cotton-web-sdk/src/well-known-events.ts` only includes 21:
+
+- `checkout_completed` is not present in the web runtime schema map.
+- `login` is not present in the web runtime schema map.
+- `logout` is not present in the web runtime schema map.
+
+Flutter already mirrors all 24 names in `lib/src/events.dart` and `lib/src/well_known_events.dart`.
+
+**Parity status:** Flutter is ahead on mirrored event names, but still behind on runtime validation behavior.
+
 ## Wire Validation
 
 The shared proto contract carries `buf.validate` rules for field constraints and message-level CEL expressions.
 
 - The **web SDK** validates outbound requests client-side before sending.
-- The **Flutter SDK** does not currently run client-side protovalidate checks for full `Event`, `IdentifyRequest`, or `SubscribeRequest` payloads.
-- Flutter also does not currently enforce the mirrored well-known event schemas at `track()` time.
+- The **Flutter SDK** does not currently run client-side protovalidate checks for full `Event`, `IdentifyRequest`, or `SubscribeRequest` payloads because `protovalidate` does not currently support Dart.
+- Flutter also does not currently enforce the mirrored well-known event schemas at `track()` time, including the 21 names the web SDK currently validates.
 
 Consequence: malformed payloads are rejected server-side rather than failing fast in the SDK.
 
-**Parity status:** Partial.
+**Parity status:** Accepted divergence.
 
 ## Where Flutter Exceeds The Web SDK
 
@@ -283,12 +296,11 @@ Severity: **High** = analytics correctness/coverage, **Medium** = behavior or DX
 |---|---|---|---|---|
 | 1 | Screen/page-view auto-tracking | `page_view` auto-emitted on init + history nav | `page_view` auto-emitted via `NavigatorObserver` when `autoPageViews: true` | Closed (High) |
 | 2 | Screen/route context on events | `$url`, `$referrer`, `$pageTitle` auto-properties | `url` and `referrer` are attached to `page_view` events only | Low-Medium |
-| 3 | Wire-level protovalidate enforcement | Client-side request validation | No full `Event`/`IdentifyRequest`/`SubscribeRequest` client validation | Medium |
-| 4 | Install referrer / deferred attribution | n/a | Link-open UTM is captured; install-referrer / deferred deep-link attribution is not | Low-Medium |
-| 5 | Compile-time typed event props | `WellKnownEventPropsMap` + overloaded `TrackFn` | Constants only; no compile-time prop typing | Low |
-| 6 | DOM interaction auto-trackers | Installed by `autoTrack` | Schemas exist, no trackers | Low |
-| 7 | Hard delivery guarantee on app kill | `navigator.sendBeacon` on `pagehide` | Best-effort `flushAll()` only | Low |
-| 8 | Package-level FCM optionality | Push is tree-shakeable and optional | FCM moved to `pug_flutter_fcm` | Closed (Low-Medium) |
+| 3 | Install referrer / deferred attribution | n/a | Link-open UTM is captured; install-referrer / deferred deep-link attribution is not | Low-Medium |
+| 4 | Compile-time typed event props | `WellKnownEventPropsMap` + overloaded `TrackFn` | Constants only; no compile-time prop typing | Low |
+| 5 | DOM interaction auto-trackers | Installed by `autoTrack` | Schemas exist, no trackers | Low |
+| 6 | Hard delivery guarantee on app kill | `navigator.sendBeacon` on `pagehide` | Best-effort `flushAll()` only | Low |
+| 7 | Package-level FCM optionality | Push is tree-shakeable and optional | FCM moved to `pug_flutter_fcm` | Closed (Low-Medium) |
 ## Compatibility Notes
 
 The Flutter SDK currently supports:
@@ -307,6 +319,6 @@ When changing parity-sensitive behavior:
 
 ## Source Of Evidence
 
-- **Flutter SDK** — audited against `lib/src/*.dart`, `lib/pug_flutter_sdk.dart`, `proto/**`, and `test/pug_flutter_sdk_test.dart` at commit `df9ba19`. Generated code under `lib/src/gen/` was excluded.
-- **Web SDK** — spot-checked against `../cotton-web-sdk/src/*.ts` at commit `72f3080`, including `pug.ts`, `track.ts`, `batch.ts`, `session.ts`, and `push.ts`.
+- **Flutter SDK** — audited against `lib/src/*.dart`, `lib/pug_flutter_sdk.dart`, `proto/**`, and `test/pug_flutter_sdk_test.dart` at commit `51857f1`. Generated code under `lib/src/gen/` was excluded.
+- **Web SDK** — spot-checked against `../cotton-web-sdk/src/*.ts` at commit `9ebd5c2`, including `pug.ts`, `track.ts`, `well-known-events.ts`, `session.ts`, and `push.ts`.
 - **Shared backend contract** — both SDKs target `sdk.events.v1.EventsService/BatchCreate`, `sdk.profiles.v1.ProfilesSDKService/Identify`, and `sdk.devices.v1.DevicesService/Subscribe`, with `buf.validate` rules carried in `proto/**`.

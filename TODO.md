@@ -44,13 +44,12 @@
 
 ## Remaining Gaps
 
-- [ ] Add real well-known event validation parity.
-  - `PropertyMapper.mapEventProperties(...)` currently does loose property mapping only.
-  - Flutter does not yet enforce schema field types/required fields/ranges the way the web SDK does.
+- [x] Skip client-side protovalidate parity in Dart.
+  - `protovalidate` does not currently support Dart, so Flutter will continue using best-effort property mapping and server-side rejection for invalid payloads.
 
-- [ ] Add wire-level request validation parity.
-  - Flutter does not client-validate full `Event`, `IdentifyRequest`, or `SubscribeRequest` payloads before send.
-  - Invalid payloads are still rejected server-side, but parity with the web SDK is not complete.
+- [x] Accept well-known event catalog drift vs `../cotton-web-sdk`.
+  - Flutter will keep mirroring the broader 24-name catalog in `PugEventNames` and `wellKnownEventSchemas`.
+  - The current web SDK runtime schema map only includes 21 names; this mismatch is accepted for now.
 
 - [ ] Decide whether route context parity should stay page-view-only or expand.
   - Web attaches `$url` and `$referrer` as auto-properties on all events.
