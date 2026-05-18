@@ -10,7 +10,7 @@ The goal is product-semantic parity where it makes sense for mobile. Browser-onl
 | --------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------- |
 | Singleton lifecycle         | `init`, `destroy`, `reset`, `rotate`                        | `Pug.init`, `Pug.destroy`, `Pug.reset`, `Pug.rotate`, `Pug.flush`          | Complete (+ explicit flush) |
 | Manual event tracking       | `track(kind, props?, opts?)`                                | `Pug.track(kind, props:, options:)`                                         | Complete                    |
-| Public API throwing         | `track()` never throws; `init()`/`identify()` throw         | `track()` never throws; `init()`/`identify()` still throw in some cases      | Partial                     |
+| Public API edge cases       | Repeated `init()` warns/no-ops; `identify()` before init warns/no-ops | Same                                                                        | Complete                    |
 | Identify/profile merge      | First identify sends anonymous ID; later calls omit it      | Same anonymous-merge behavior                                                | Complete                    |
 | Sessions                    | Lazy resolve, idle/max expiry, rotate/reset                 | Same mobile semantics                                                        | Complete                    |
 | Device ID                   | Push device-ID key, used for push identity/linking          | Project-scoped device-ID key, preserved across session rotation              | Complete                    |
@@ -53,9 +53,9 @@ The goal is product-semantic parity where it makes sense for mobile. Browser-onl
 
 `lib/src/pug.dart` exposes:
 
-- `Pug.init(projectId, options)` — asynchronous; throws on invalid input, repeated init, or init failure
+- `Pug.init(projectId, options)` — asynchronous; throws on invalid input or init failure; repeated init warns/no-ops
 - `Pug.track(kind, props:, options:)` — never throws
-- `Pug.identify(externalId, traits:)` — asynchronous; throws on invalid input, uninitialized SDK, or transport failure
+- `Pug.identify(externalId, traits:)` — asynchronous; throws on invalid input or transport failure; warns/no-ops before init
 - `Pug.reset()`
 - `Pug.rotate()`
 - `Pug.flush()` — Flutter-only public API
@@ -185,24 +185,23 @@ Web uses `navigator.sendBeacon` during unload. Flutter uses best-effort async fl
 
 ## Error Handling And Resilience
 
-Current Flutter behavior is only partly "best-effort":
+Compared with the web SDK:
 
-- `track()`, `reset()`, `rotate()`, `flush()`, `destroy()`, and `PugPush` helpers catch/log failures.
-- `Pug.init()` still throws `ArgumentError` for empty `projectId`/`apiKey`, `StateError` for repeated init, and rethrows init failures after logging.
-- `Pug.identify()` still throws `ArgumentError` for empty `externalId`, `StateError` before init, and rethrows transport failures after logging.
+- `track()`, `reset()`, `rotate()`, `flush()`, `destroy()`, and `PugPush` helpers are best-effort and catch/log failures.
+- `Pug.init()` matches web on invalid-input throwing and repeated-init warn/no-op behavior.
+- `Pug.identify()` matches web on invalid-input throwing, transport-failure propagation, and pre-init warn/no-op behavior.
 - `SafePugLogger` prevents a buggy caller-supplied logger from crashing the app.
 - `SafePugStorage` falls back to in-memory storage if persistence fails.
 
-**Parity status:** Partial. The SDK is more defensive than web in several paths, but it has not yet reached the documented "all public APIs are non-throwing" behavior.
+**Parity status:** Complete for public API edge cases. Remaining mismatches are elsewhere in validation and transport details.
 
 ## Behavioral Differences
 
-1. **Public-API throwing.** Web `init()`/`identify()` throw on invalid input and identify failures; Flutter still throws from those two APIs as well.
-2. **Error classification.** Web classifies permanent failures by gRPC code; Flutter classifies by HTTP status code.
-3. **Unexpected transport errors.** Web treats untyped errors as permanent and drops the batch; Flutter treats them as transient and retries.
-4. **`identify()` device linking.** Web sends `deviceId` only on first identify; Flutter sends it on every identify call.
-5. **Queue persistence cadence.** Web debounces `localStorage` writes; Flutter persists synchronously on `push`, `lock`, `commit`, and `rollback`.
-6. **Retry backoff.** Web retries at fixed `maxWaitMs`; Flutter doubles once with `max(maxWaitMs, 1000) * 2`.
+1. **Error classification.** Web classifies permanent failures by gRPC code; Flutter classifies by HTTP status code.
+2. **Unexpected transport errors.** Web treats untyped errors as permanent and drops the batch; Flutter treats them as transient and retries.
+3. **`identify()` device linking.** Web sends `deviceId` only on first identify; Flutter sends it on every identify call.
+4. **Queue persistence cadence.** Web debounces `localStorage` writes; Flutter persists synchronously on `push`, `lock`, `commit`, and `rollback`.
+5. **Retry backoff.** Web retries at fixed `maxWaitMs`; Flutter doubles once with `max(maxWaitMs, 1000) * 2`.
 
 ## Auto Tracking
 
@@ -299,7 +298,6 @@ Severity: **High** = analytics correctness/coverage, **Medium** = behavior or DX
 | 7 | Hard delivery guarantee on app kill | `navigator.sendBeacon` on `pagehide` | Best-effort `flushAll()` only | Low |
 | 8 | Package-level FCM optionality | Push is tree-shakeable and optional | FCM moved to `pug_flutter_fcm` | Closed (Low-Medium) |
 | 9 | `identify()` device-linking cadence | Sends `deviceId` on first identify only | Sends `deviceId` on every identify call | Medium |
-
 ## Compatibility Notes
 
 The Flutter SDK currently supports:
@@ -318,6 +316,6 @@ When changing parity-sensitive behavior:
 
 ## Source Of Evidence
 
-- **Flutter SDK** — audited against `lib/src/*.dart`, `lib/pug_flutter_sdk.dart`, `proto/**`, and `test/pug_flutter_sdk_test.dart` at commit `1df9d45`. Generated code under `lib/src/gen/` was excluded.
+- **Flutter SDK** — audited against `lib/src/*.dart`, `lib/pug_flutter_sdk.dart`, `proto/**`, and `test/pug_flutter_sdk_test.dart` at commit `df9ba19`. Generated code under `lib/src/gen/` was excluded.
 - **Web SDK** — spot-checked against `../cotton-web-sdk/src/*.ts` at commit `72f3080`, including `pug.ts`, `track.ts`, `batch.ts`, `session.ts`, and `push.ts`.
 - **Shared backend contract** — both SDKs target `sdk.events.v1.EventsService/BatchCreate`, `sdk.profiles.v1.ProfilesSDKService/Identify`, and `sdk.devices.v1.DevicesService/Subscribe`, with `buf.validate` rules carried in `proto/**`.

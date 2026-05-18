@@ -10,17 +10,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('init validates required values and repeated init is ignored', () async {
+  test('init validates required values and repeated init warns and is ignored', () async {
     await expectLater(
       Pug.init('', const PugOptions(apiKey: 'key', autoTrack: false)),
       throwsA(isA<ArgumentError>()),
     );
 
+    final logger = CapturingLogger();
     final transport = FakeTransport();
     await Pug.init(
       'project',
       PugOptions(
         apiKey: 'key',
+        logger: logger,
         transport: transport,
         storage: MemoryPugStorage(),
         autoTrack: false,
@@ -28,12 +30,17 @@ void main() {
     );
 
     await expectLater(
-      () => Pug.init(
+      Pug.init(
         'project',
-        const PugOptions(apiKey: 'key', autoTrack: false),
+        PugOptions(
+          apiKey: 'key',
+          logger: logger,
+          autoTrack: false,
+        ),
       ),
-      throwsA(isA<StateError>()),
+      completes,
     );
+    expect(logger.warnings, contains('Pug.init() called after initialization; ignoring.'));
 
     Pug.destroy();
   });
@@ -88,11 +95,8 @@ void main() {
     expect(event.customProperties.containsKey('none'), isFalse);
   });
 
-  test('identify throws for invalid state or transport failures', () async {
-    await expectLater(
-      Pug.identify('user-before-init'),
-      throwsA(isA<StateError>()),
-    );
+  test('identify before init warns, while invalid input and transport failures still throw', () async {
+    await expectLater(Pug.identify('user-before-init'), completes);
 
     final failedTransport =
         FakeTransport()
@@ -107,7 +111,7 @@ void main() {
     );
   });
 
-  test('init and identify throw even when logger throws', () async {
+  test('init and identify remain safe when logger throws', () async {
     await expectLater(
       Pug.init(
         '',
@@ -125,6 +129,8 @@ void main() {
       autoCaptureCampaigns: false,
     );
     await expectLater(client.identify(''), throwsA(isA<ArgumentError>()));
+    Pug.destroy();
+    await expectLater(Pug.identify('user-before-init'), completes);
     expect(
       () => client.track('purchase', props: {'bad': double.nan}),
       returnsNormally,
