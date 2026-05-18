@@ -52,10 +52,6 @@
   - Flutter does not client-validate full `Event`, `IdentifyRequest`, or `SubscribeRequest` payloads before send.
   - Invalid payloads are still rejected server-side, but parity with the web SDK is not complete.
 
-- [ ] Align `identify()` device-linking semantics with web/backend guidance.
-  - Web sends `deviceId` on first identify only.
-  - Flutter currently sends `deviceId` on every identify call.
-
 - [ ] Decide whether route context parity should stay page-view-only or expand.
   - Web attaches `$url` and `$referrer` as auto-properties on all events.
   - Flutter currently attaches `url` and `referrer` only to `page_view` events.

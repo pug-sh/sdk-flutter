@@ -154,12 +154,7 @@ Both SDKs:
 
 Flutter stores state under project-scoped keys for session, profile, device ID, external ID, queue, and campaign context.
 
-Important difference:
-
-- Web sends `deviceId` only on the first identify call.
-- Flutter sends `deviceId` on every identify call.
-
-**Parity status:** Complete for core identity behavior, with a remaining device-linking cadence mismatch.
+**Parity status:** Complete.
 
 ## Queue And Transport
 
@@ -199,9 +194,8 @@ Compared with the web SDK:
 
 1. **Error classification.** Web classifies permanent failures by gRPC code; Flutter classifies by HTTP status code.
 2. **Unexpected transport errors.** Web treats untyped errors as permanent and drops the batch; Flutter treats them as transient and retries.
-3. **`identify()` device linking.** Web sends `deviceId` only on first identify; Flutter sends it on every identify call.
-4. **Queue persistence cadence.** Web debounces `localStorage` writes; Flutter persists synchronously on `push`, `lock`, `commit`, and `rollback`.
-5. **Retry backoff.** Web retries at fixed `maxWaitMs`; Flutter doubles once with `max(maxWaitMs, 1000) * 2`.
+3. **Queue persistence cadence.** Web debounces `localStorage` writes; Flutter persists synchronously on `push`, `lock`, `commit`, and `rollback`.
+4. **Retry backoff.** Web retries at fixed `maxWaitMs`; Flutter doubles once with `max(maxWaitMs, 1000) * 2`.
 
 ## Auto Tracking
 
@@ -297,7 +291,6 @@ Severity: **High** = analytics correctness/coverage, **Medium** = behavior or DX
 | 6 | DOM interaction auto-trackers | Installed by `autoTrack` | Schemas exist, no trackers | Low |
 | 7 | Hard delivery guarantee on app kill | `navigator.sendBeacon` on `pagehide` | Best-effort `flushAll()` only | Low |
 | 8 | Package-level FCM optionality | Push is tree-shakeable and optional | FCM moved to `pug_flutter_fcm` | Closed (Low-Medium) |
-| 9 | `identify()` device-linking cadence | Sends `deviceId` on first identify only | Sends `deviceId` on every identify call | Medium |
 ## Compatibility Notes
 
 The Flutter SDK currently supports:

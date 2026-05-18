@@ -20,12 +20,17 @@ class PugProtoCodec {
   }
 
   List<int> encodeIdentifyRequest(IdentifyRequest request) {
-    return profilespb.IdentifyRequest(
+    final proto = profilespb.IdentifyRequest(
       externalId: request.externalId,
       traits: _toStruct(_propertyMapToPlain(request.traits)),
-      anonymousId: request.anonymousId,
-      deviceId: request.deviceId,
-    ).writeToBuffer();
+    );
+    if (request.anonymousId != null) {
+      proto.anonymousId = request.anonymousId!;
+    }
+    if (request.deviceId != null) {
+      proto.deviceId = request.deviceId!;
+    }
+    return proto.writeToBuffer();
   }
 
   List<int> encodeSubscribeRequest(PushSubscription subscription) {

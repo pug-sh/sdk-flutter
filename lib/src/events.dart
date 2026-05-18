@@ -298,15 +298,15 @@ class IdentifyRequest {
   const IdentifyRequest({
     required this.projectId,
     required this.externalId,
-    required this.deviceId,
     required this.traits,
     this.anonymousId,
+    this.deviceId,
   });
 
   final String projectId;
   final String externalId;
   final String? anonymousId;
-  final String deviceId;
+  final String? deviceId;
   final Map<String, PropertyValue> traits;
 }
 
