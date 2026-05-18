@@ -13,13 +13,10 @@ import 'push_models.dart';
 class PugProtoCodec {
   const PugProtoCodec();
 
-  List<int> encodeBatchCreateRequest(List<Event> events) {
-    return eventspb.BatchCreateRequest(
-      events: events.map(_toProtoEvent),
-    ).writeToBuffer();
-  }
+  eventspb.BatchCreateRequest toBatchCreateRequest(List<Event> events) =>
+      eventspb.BatchCreateRequest(events: events.map(_toProtoEvent));
 
-  List<int> encodeIdentifyRequest(IdentifyRequest request) {
+  profilespb.IdentifyRequest toIdentifyRequest(IdentifyRequest request) {
     final proto = profilespb.IdentifyRequest(
       externalId: request.externalId,
       traits: _toStruct(_propertyMapToPlain(request.traits)),
@@ -30,10 +27,10 @@ class PugProtoCodec {
     if (request.deviceId != null) {
       proto.deviceId = request.deviceId!;
     }
-    return proto.writeToBuffer();
+    return proto;
   }
 
-  List<int> encodeSubscribeRequest(PushSubscription subscription) {
+  devicespb.SubscribeRequest toSubscribeRequest(PushSubscription subscription) {
     return devicespb.SubscribeRequest(
       deviceId: subscription.deviceId,
       platform: subscription.platform,
@@ -41,7 +38,7 @@ class PugProtoCodec {
       profileId: subscription.profileId,
       token: subscription.token,
       properties: _toStruct(subscription.properties),
-    ).writeToBuffer();
+    );
   }
 
   eventspb.Event _toProtoEvent(Event event) {

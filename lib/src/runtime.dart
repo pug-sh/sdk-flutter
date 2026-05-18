@@ -8,11 +8,11 @@ import 'auto_properties.dart';
 import 'campaign.dart';
 import 'clock_ids.dart';
 import 'configuration.dart';
+import 'connect_transport.dart';
 import 'contracts.dart';
 import 'errors.dart';
 import 'event_queue_storage.dart';
 import 'events.dart';
-import 'http_transport.dart';
 import 'profile_manager.dart';
 import 'push_models.dart';
 import 'session_manager.dart';
@@ -78,7 +78,10 @@ class PugClient with WidgetsBindingObserver {
        ) {
     _transport =
         _options.transport ??
-        HttpPugTransport(endpoint: _options.endpoint, apiKey: _options.apiKey);
+        ConnectPugTransport(
+          endpoint: _options.endpoint,
+          apiKey: _options.apiKey,
+        );
     _queue = PugEventQueue(
       key: _queueKey,
       storage: _storage,
