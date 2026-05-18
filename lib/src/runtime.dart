@@ -282,10 +282,13 @@ class PugClient with WidgetsBindingObserver {
       }
       _options.logger.debug(stackTrace.toString());
     } catch (error, stackTrace) {
-      _options.logger.warn('Pug batch send failed; it will be retried.');
+      _options.logger.error(
+        'Pug dropped a batch after an unexpected transport failure.',
+        error,
+        stackTrace,
+      );
+      _queue.commit();
       _options.logger.debug(stackTrace.toString());
-      _queue.rollback();
-      _scheduleFlush(withBackoff: true);
     } finally {
       _isFlushing = false;
     }
@@ -417,13 +420,11 @@ class PugClient with WidgetsBindingObserver {
         _scheduleFlush(withBackoff: true);
       }
     } catch (error, stackTrace) {
-      _options.logger.warn(
-        'Pug immediate event send failed; event will be retried.',
+      _options.logger.error(
+        'Pug dropped an event after an unexpected transport failure.',
+        error,
+        stackTrace,
       );
-      _options.logger.debug(error.toString());
-      _options.logger.debug(stackTrace.toString());
-      _queue.push(event);
-      _scheduleFlush(withBackoff: true);
     }
   }
 

@@ -359,6 +359,28 @@ void main() {
   );
 
   test(
+    'unexpected transport errors drop queued and immediate events without retry',
+    () async {
+      final queuedTransport = FakeTransport()
+        ..batchFailure = StateError('poison batch');
+      final queuedClient = testClient(transport: queuedTransport);
+      queuedClient.track('one');
+      await queuedClient.flush();
+      expect(queuedClient.queue.peekUnlocked(), isEmpty);
+
+      final immediateTransport = FakeTransport()
+        ..sendFailure = StateError('poison immediate');
+      final immediateClient = testClient(transport: immediateTransport);
+      immediateClient.track(
+        'one',
+        options: const TrackOptions(immediate: true),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(immediateClient.queue.peekUnlocked(), isEmpty);
+    },
+  );
+
+  test(
     'lifecycle background flushes queued events even without auto tracking',
     () async {
       final transport = FakeTransport();
@@ -613,16 +635,24 @@ class FakeTransport implements PugTransport {
   final List<List<Event>> batches = <List<Event>>[];
   final List<IdentifyRequest> identifies = <IdentifyRequest>[];
   final List<PushSubscription> subscriptions = <PushSubscription>[];
+  Object? sendFailure;
+  Object? batchFailure;
   PugTransportException? batchError;
   PugTransportException? identifyError;
 
   @override
   Future<void> send(Event event) async {
+    if (sendFailure != null) {
+      throw sendFailure!;
+    }
     sent.add(event);
   }
 
   @override
   Future<void> sendBatch(List<Event> events) async {
+    if (batchFailure != null) {
+      throw batchFailure!;
+    }
     if (batchError != null) {
       throw batchError!;
     }

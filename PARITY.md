@@ -193,9 +193,8 @@ Compared with the web SDK:
 ## Behavioral Differences
 
 1. **Error classification.** Web classifies permanent failures by gRPC code; Flutter classifies by HTTP status code.
-2. **Unexpected transport errors.** Web treats untyped errors as permanent and drops the batch; Flutter treats them as transient and retries.
-3. **Queue persistence cadence.** Web debounces `localStorage` writes; Flutter persists synchronously on `push`, `lock`, `commit`, and `rollback`.
-4. **Retry backoff.** Web retries at fixed `maxWaitMs`; Flutter doubles once with `max(maxWaitMs, 1000) * 2`.
+2. **Queue persistence cadence.** Web debounces `localStorage` writes; Flutter persists synchronously on `push`, `lock`, `commit`, and `rollback`.
+3. **Retry backoff.** Web retries at fixed `maxWaitMs`; Flutter doubles once with `max(maxWaitMs, 1000) * 2`.
 
 ## Auto Tracking
 
