@@ -208,6 +208,7 @@ class PugClient with WidgetsBindingObserver {
       throw ArgumentError('externalId is required');
     }
     final profile = _resolveProfile();
+    final firstIdentify = profile.externalId == null;
     final sanitizedTraits = PropertyMapper(
       logger: _options.logger,
     ).mapProperties(traits);
@@ -215,8 +216,8 @@ class PugClient with WidgetsBindingObserver {
       IdentifyRequest(
         projectId: projectId,
         externalId: externalId,
-        anonymousId: profile.externalId == null ? profile.anonymousId : null,
-        deviceId: _resolveDeviceId(),
+        anonymousId: firstIdentify ? profile.anonymousId : null,
+        deviceId: firstIdentify ? _resolveDeviceId() : null,
         traits: sanitizedTraits,
       ),
     );

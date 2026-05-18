@@ -276,7 +276,7 @@ void main() {
   });
 
   test(
-    'identify first call includes anonymous id and later calls omit it',
+    'identify first call includes anonymous id and device id and later calls omit both',
     () async {
       final transport = FakeTransport();
       final client = testClient(transport: transport);
@@ -285,8 +285,11 @@ void main() {
       await client.identify('user-2');
 
       expect(transport.identifies.first.anonymousId, startsWith('anon-'));
+      expect(transport.identifies.first.deviceId, isNotNull);
+      expect(transport.identifies.first.deviceId, isNotEmpty);
       expect(transport.identifies.first.traits['plan']?.value, 'pro');
       expect(transport.identifies.last.anonymousId, isNull);
+      expect(transport.identifies.last.deviceId, isNull);
     },
   );
 
