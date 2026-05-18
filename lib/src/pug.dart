@@ -53,7 +53,8 @@ class Pug {
       throw ArgumentError('apiKey is required');
     }
     if (_client != null) {
-      throw StateError('Pug is already initialized');
+      logger.warn('Pug.init() called after initialization; ignoring.');
+      return;
     }
     try {
       final resolvedOptions = options.copyWith(
@@ -96,7 +97,8 @@ class Pug {
     }
     final client = _client;
     if (client == null) {
-      throw StateError('Pug is not initialized');
+      _fallbackLogger.warn('Pug.identify() called before init(); ignoring.');
+      return;
     }
     try {
       await client.identify(externalId, traits: traits);

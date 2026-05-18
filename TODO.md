@@ -55,3 +55,11 @@
 - [ ] Align `identify()` device-linking semantics with web/backend guidance.
   - Web sends `deviceId` on first identify only.
   - Flutter currently sends `deviceId` on every identify call.
+
+- [ ] Decide whether route context parity should stay page-view-only or expand.
+  - Web attaches `$url` and `$referrer` as auto-properties on all events.
+  - Flutter currently attaches `url` and `referrer` only to `page_view` events.
+
+- [ ] Decide whether deferred attribution / install-referrer support is needed for mobile parity goals.
+  - Flutter captures UTM-style params from app links and later deep links.
+  - It does not currently capture Android install referrer or other deferred deep-link attribution sources.
