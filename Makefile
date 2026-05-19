@@ -18,6 +18,11 @@ protos:
 	find $(PROTO_OUT) \( -name '*.pbjson.dart' -o -name '*.pbserver.dart' \) -delete
 	find $(PROTO_OUT) -name '*.pbenum.dart' ! -path '$(PROTO_OUT)/buf/validate/validate.pbenum.dart' ! -path '$(PROTO_OUT)/google/protobuf/descriptor.pbenum.dart' -delete
 	rm -f $(PROTO_OUT)/google/protobuf/descriptor.pb.dart
+	$(MAKE) typed-track
+
+typed-track:
+	dart run tool/generate_track_namespace.dart
+	dart format lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/events.dart
 
 format:
 	dart format lib test
