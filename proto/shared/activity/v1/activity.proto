@@ -1,0 +1,196 @@
+edition = "2023";
+package shared.activity.v1;
+
+import "buf/validate/validate.proto";
+import "common/v1/filter_schema.proto";
+import "common/v1/filters.proto";
+import "common/v1/time.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/pug-sh/pug/internal/gen/proto/shared/activity/v1;activityv1";
+
+// ActivityService provides paginated access to raw event data and aggregated activity insights for user profiles.
+service ActivityService {
+  // GetActivityFeed returns a paginated, filterable list of events for a user profile.
+  // Resolves profile aliases so merged anonymous events are included.
+  rpc GetActivityFeed(GetActivityFeedRequest) returns (GetActivityFeedResponse);
+  // GetEventExplorer returns a paginated, filterable list of events across all users
+  // in a project. Does not resolve aliases.
+  rpc GetEventExplorer(GetEventExplorerRequest) returns (GetEventExplorerResponse);
+  // GetFilterSchema returns event names, property keys, and profile property keys for filter UIs.
+  // The filter-schema concept is service-agnostic; both shared.activity and
+  // shared.insights expose the same shape via common.v1.
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  rpc GetFilterSchema(common.v1.GetFilterSchemaRequest) returns (common.v1.GetFilterSchemaResponse);
+  // GetPropertyValues returns distinct values for a given property key.
+  rpc GetPropertyValues(GetPropertyValuesRequest) returns (GetPropertyValuesResponse);
+  // GetActivityHeatmap returns per-day event counts for a user profile over a time window.
+  // Defaults to the last 60 days when no time_range is provided.
+  rpc GetActivityHeatmap(GetActivityHeatmapRequest) returns (GetActivityHeatmapResponse);
+  // GetProfileStats returns aggregate statistics, device/browser/location context from the
+  // latest event, per-day heatmap data (last 60 days), and profile properties for a profile.
+  // Resolves aliases so merged anonymous events are included.
+  rpc GetProfileStats(GetProfileStatsRequest) returns (GetProfileStatsResponse);
+}
+
+message GetActivityFeedRequest {
+  // In a multi-event filter list, each event must specify a kind or at least one property filter.
+  // A single-element list with an empty EventFilter is allowed (matches all events).
+  option (buf.validate.message).cel = {
+    id: "activity_feed.events_non_empty_in_multi"
+    message: "each event filter must specify a kind or at least one property filter"
+    expression:
+      "this.events.size() <= 1"
+      "|| this.events.all(e, e.kind != '' || e.filters.size() > 0)"
+  };
+  // Required. The profile ID to fetch events for.
+  string distinct_id = 1 [(buf.validate.field).required = true];
+  // Optional. Filter by session. Empty means all sessions.
+  string session_id = 2;
+  // Optional. Restrict to events within this time window.
+  common.v1.TimeRange time_range = 3;
+  // Optional. Filter by event properties (auto or custom).
+  repeated common.v1.PropertyFilter property_filters = 4 [(buf.validate.field).repeated.max_items = 20];
+  // 0 means server default (100). Max 1000.
+  int32 page_size = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+  // Opaque cursor from a previous response's next_page_token. Empty for the first page.
+  string page_token = 6;
+  // Optional. Filter by multiple event types with per-event property filters.
+  repeated common.v1.EventFilter events = 7 [(buf.validate.field).repeated.max_items = 50];
+}
+
+message ActivityEvent {
+  string event_id = 1;
+  string kind = 2;
+  string distinct_id = 3;
+  google.protobuf.Timestamp occur_time = 4;
+  // May be empty if no session was active.
+  string session_id = 5;
+  // System-enriched properties (geo, user-agent, etc.).
+  google.protobuf.Struct auto_properties = 6;
+  // Client-supplied custom properties.
+  google.protobuf.Struct custom_properties = 7;
+}
+
+message GetActivityFeedResponse {
+  repeated ActivityEvent events = 1;
+  // Empty when there are no more pages.
+  string next_page_token = 2;
+}
+
+message GetEventExplorerRequest {
+  // In a multi-event filter list, each event must specify a kind or at least one property filter.
+  option (buf.validate.message).cel = {
+    id: "event_explorer.events_non_empty_in_multi"
+    message: "each event filter must specify a kind or at least one property filter"
+    expression:
+      "this.events.size() <= 1"
+      "|| this.events.all(e, e.kind != '' || e.filters.size() > 0)"
+  };
+  // Optional. Filter to a specific user. Empty means all users.
+  string distinct_id = 1;
+  // Optional. Filter by session. Empty means all sessions.
+  string session_id = 2;
+  // Optional. Restrict to events within this time window.
+  common.v1.TimeRange time_range = 3;
+  // Optional. Filter by event properties (auto or custom).
+  repeated common.v1.PropertyFilter property_filters = 4 [(buf.validate.field).repeated.max_items = 20];
+  // 0 means server default (100). Max 1000.
+  int32 page_size = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+  // Opaque cursor from a previous response's next_page_token. Empty for the first page.
+  string page_token = 6;
+  // Optional. Filter by multiple event types with per-event property filters.
+  repeated common.v1.EventFilter events = 7 [(buf.validate.field).repeated.max_items = 50];
+}
+
+message GetEventExplorerResponse {
+  repeated ActivityEvent events = 1;
+  // Empty when there are no more pages.
+  string next_page_token = 2;
+}
+
+message GetPropertyValuesRequest {
+  string property_key = 1 [(buf.validate.field) = {
+    required: true
+    // See common.v1.PropertyFilter.property for the empty-segment rationale.
+    string: {pattern: "^\\$?[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$"}
+  }];
+  common.v1.PropertySource source = 2 [(buf.validate.field) = {
+    required: true
+    enum: {defined_only: true}
+  }];
+  string event_kind = 3 [(buf.validate.field) = {
+    string: {pattern: "^[a-zA-Z0-9_.-]*$"}
+  }];
+}
+
+message GetPropertyValuesResponse {
+  repeated string values = 1;
+}
+
+message GetActivityHeatmapRequest {
+  string distinct_id = 1 [(buf.validate.field).required = true];
+  // Optional. Defaults to the last 60 days when omitted.
+  common.v1.TimeRange time_range = 2;
+}
+
+// HeatmapDay holds the event count for a single calendar day.
+message HeatmapDay {
+  // Date in YYYY-MM-DD format (UTC).
+  string date = 1;
+  int64 count = 2;
+}
+
+message GetActivityHeatmapResponse {
+  repeated HeatmapDay days = 1;
+}
+
+message GetProfileStatsRequest {
+  string distinct_id = 1 [(buf.validate.field).required = true];
+}
+
+// ProfileStats holds aggregate event statistics and device/location context
+// derived from the profile's latest event.
+message ProfileStats {
+  // Timestamp of the earliest event recorded for this profile.
+  google.protobuf.Timestamp first_seen = 1;
+  // Timestamp of the most recent event recorded for this profile.
+  google.protobuf.Timestamp last_seen = 2;
+  // Total number of events recorded for this profile.
+  int64 total_events = 3;
+  // Browser name from the latest event (e.g. "Chrome"). Empty if unavailable.
+  string browser = 4;
+  // Major browser version from the latest event (e.g. "124"). Empty if unavailable.
+  string browser_version = 5;
+  // OS name from the latest event (e.g. "Mac OS X"). Empty if unavailable.
+  string os = 6;
+  // Major OS version from the latest event (e.g. "14"). Empty if unavailable.
+  string os_version = 7;
+  // Device model from the latest event (e.g. "iPhone"). Empty for desktop browsers.
+  string device = 8;
+  // Country name from the latest event (e.g. "United States"). Empty if unavailable.
+  string country = 9;
+  // City name from the latest event (e.g. "San Francisco"). Empty if unavailable.
+  string city = 10;
+  // IP address from the latest event. Empty if unavailable.
+  string ip = 11;
+}
+
+message GetProfileStatsResponse {
+  // Not set when the profile has no recorded events in ClickHouse.
+  ProfileStats stats = 1;
+  // Per-day event counts for the last 60 days.
+  repeated HeatmapDay heatmap = 2;
+  // Profile properties set via identify() calls. Includes both auto-properties
+  // (prefixed with '$') and custom properties. Not set when no profile record exists in PostgreSQL.
+  google.protobuf.Struct properties = 3;
+}

@@ -3,7 +3,12 @@ PROTO_OUT := lib/src/gen
 PROTO_FILES := $(shell find proto -type f -name '*.proto' | sort)
 WELL_KNOWN_PROTO_FILES := google/protobuf/descriptor.proto
 
-.PHONY: protos format analyze test check
+.PHONY: protos sync-protos typed-track format analyze test check
+
+sync-protos:
+	@command -v buf >/dev/null || (echo "buf CLI is required; install: brew install bufbuild/buf/buf" && exit 1)
+	buf export buf.build/fivebits/pug --output proto/
+	@echo "Synced buf catalog into proto/. Run 'make protos' to regenerate Dart code."
 
 protos:
 	@command -v protoc >/dev/null || (echo "protoc is required" && exit 1)
