@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:meta/meta.dart';
 
 import 'auto_properties.dart';
 import 'configuration.dart';
@@ -18,6 +19,7 @@ class Pug {
 
   PugClient? get clientOrNull => _client;
 
+  @internal
   PugLogger get logger => _client?.logger ?? _fallbackLogger;
 
   static Future<void> init(String projectId, PugOptions options) =>
