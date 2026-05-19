@@ -137,22 +137,29 @@ await Pug.init(
 
 ## Track Events
 
+Use the typed methods for well-known events — required fields, value types,
+and method names are all compile-time checked:
+
 ```dart
-Pug.track(
-  PugEventNames.addToCart,
-  props: {
-    'productId': 'shirt-001',
-    'amount': 29.99,
-    'currency': 'USD',
-  },
+Pug.track.purchase(
+  productId: 'sku-1',
+  amount: 99.50,
+  currency: 'USD',
+  extras: {'cohort': 'A'},
 );
+Pug.track.signup();
+Pug.track.search(query: 'shoes');
 ```
 
-Use the same `Pug.track(...)` API for both custom events and well-known events.
-The difference is the event name you pass:
+For custom or dynamic event names, the untyped form remains available:
 
-- Custom events use any string name, such as `'checkout_step_viewed'`.
-- Well-known events use `PugEventNames.*` constants, such as `PugEventNames.addToCart`.
+```dart
+Pug.track('cart_abandoned_v2', props: {'cartId': 'c-1', 'value': 41.0});
+```
+
+Using `Pug.track(...)` with a well-known event name still works, but emits a
+debug-level hint suggesting the typed alternative. The hint is suppressed in
+release builds.
 
 ### Custom Events
 
@@ -201,37 +208,36 @@ Pug.track(
 
 ### Well-Known Events
 
-Well-known events use exported constants from `PugEventNames`:
+Well-known events have a typed method on `Pug.track.*` with compile-time property
+checking. Each method accepts an optional `extras` map for ad-hoc properties:
 
 ```dart
-Pug.track(PugEventNames.signup);
-
-Pug.track(
-  PugEventNames.search,
-  props: {
-    'query': 'running shoes',
-  },
+Pug.track.purchase(
+  productId: 'sku-123',
+  amount: 49.0,
+  currency: 'USD',
+  orderId: 'ord-1001',
 );
 
-Pug.track(
-  PugEventNames.notificationClicked,
-  props: {
-    'campaignId': 'spring-sale',
-    'notificationType': 'promo',
-  },
+Pug.track.search(query: 'running shoes');
+
+Pug.track.notificationClicked(
+  campaignId: 'spring-sale',
+  extras: {'notificationType': 'promo'},
 );
 ```
 
-Well-known events can still include extra custom properties:
+The untyped `Pug.track(PugEventNames.*)` path continues to work but emits a
+debug-level hint recommending the typed alternative:
 
 ```dart
+// Still works — emits a debug hint in non-release builds.
 Pug.track(
   PugEventNames.purchase,
   props: {
     'productId': 'sku-123',
     'amount': 49.0,
     'currency': 'USD',
-    'orderId': 'ord-1001',
   },
 );
 ```
@@ -245,34 +251,6 @@ Property values supported by the SDK:
 - maps and lists that can be JSON encoded
 
 Unsupported or non-finite values are dropped.
-
-Well-known event names such as `PugEventNames.addToCart`, `PugEventNames.pageView`,
-and `PugEventNames.notificationClicked` are exported as constants. Flutter does
-not currently enforce schema-aware validation for those event properties in the
-SDK; invalid payloads are rejected server-side.
-
-### Editor Support
-
-The current editor experience is:
-
-- Event name autocomplete: yes, via `PugEventNames.*`
-- Event property autocomplete/type safety: no
-
-`props` is still `Map<String, Object?>`, so the editor does not currently give
-per-event property hints, required-field enforcement, or value-type checking for
-well-known event properties.
-
-For example, this compiles even though the payload shape is wrong for the shared
-well-known schema:
-
-```dart
-Pug.track(
-  PugEventNames.purchase,
-  props: {
-    'amount': '49.00',
-  },
-);
-```
 
 ## Identify Users
 
