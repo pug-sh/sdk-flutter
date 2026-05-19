@@ -56,6 +56,13 @@ void main() {
         skipped['no_kind_option'] = skipped['no_kind_option']! + 1;
         continue;
       }
+      if (event.platforms.contains('PLATFORM_UNSPECIFIED')) {
+        stderr.writeln(
+          'FATAL: ${event.messageName} lists PLATFORM_UNSPECIFIED in platforms, '
+          'which is forbidden by the options.proto contract. Aborting.',
+        );
+        exit(2);
+      }
       final mobile = _isMobileApplicable(event.platforms);
       if (!mobile) {
         if (event.platforms.length == 1 &&
@@ -231,19 +238,24 @@ _Event _parseMessageBody(
   required String messageName,
   required String sourceFile,
 }) {
+  // Strip single-line comments before regex extraction so a commented-out
+  // option line (e.g. `// option (common.events.v1.kind) = "old_name";`)
+  // cannot produce a phantom kind or platform match.
+  final strippedBody = body.replaceAll(RegExp(r'//[^\n]*'), '');
+
   String? kind;
   final platforms = <String>[];
   final fields = <_Field>[];
   final skippedFields = <_SkippedField>[];
 
   // 1. Kind option (at most one).
-  final kindMatch = _kindRe.firstMatch(body);
+  final kindMatch = _kindRe.firstMatch(strippedBody);
   if (kindMatch != null) {
     kind = kindMatch.group(1);
   }
 
   // 2. Platform options (zero or more).
-  for (final m in _platformRe.allMatches(body)) {
+  for (final m in _platformRe.allMatches(strippedBody)) {
     platforms.add(m.group(1)!);
   }
 
@@ -253,9 +265,9 @@ _Event _parseMessageBody(
   // (which can span multiple lines if there's a `[...]` options block with
   // nested braces). We do that by scanning forward from the match start until
   // we hit a top-level `;` outside any brackets/braces.
-  final headMatches = _fieldHeadRe.allMatches(body).toList();
+  final headMatches = _fieldHeadRe.allMatches(strippedBody).toList();
   for (final head in headMatches) {
-    final fullDecl = _extractFieldDeclaration(body, head.start);
+    final fullDecl = _extractFieldDeclaration(strippedBody, head.start);
     if (fullDecl == null) continue;
 
     final protoType = head.group(1)!.trim();
