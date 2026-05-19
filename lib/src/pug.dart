@@ -6,6 +6,7 @@ import 'configuration.dart';
 import 'contracts.dart';
 import 'runtime.dart';
 import 'shared_preferences_storage.dart';
+import 'track_namespace.dart';
 
 class Pug {
   Pug._();
@@ -25,13 +26,7 @@ class Pug {
   static Future<void> init(String projectId, PugOptions options) =>
       _shared.initialize(projectId, options);
 
-  static void track(
-    String kind, {
-    Map<String, Object?> props = const {},
-    TrackOptions options = const TrackOptions(),
-  }) {
-    _shared.capture(kind, props: props, options: options);
-  }
+  static final TrackNamespace track = TrackNamespace(_shared);
 
   static Future<void> identify(
     String externalId, {

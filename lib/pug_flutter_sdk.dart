@@ -11,4 +11,5 @@ export 'src/pug.dart';
 export 'src/push.dart';
 export 'src/runtime.dart';
 export 'src/shared_preferences_storage.dart';
+export 'src/track_namespace.dart' show TrackNamespace;
 export 'src/well_known_events.dart';
