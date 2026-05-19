@@ -51,6 +51,10 @@
   - Flutter will keep mirroring the broader 24-name catalog in `PugEventNames` and `wellKnownEventSchemas`.
   - The current web SDK runtime schema map only includes 21 names; this mismatch is accepted for now.
 
+- [x] Adopt full buf well-known event catalog and add typed track API.
+  - Per-event typed methods on `Pug.track.*` codegen'd via `make typed-track`.
+  - `Pug.track('kind', props:)` retained as discouraged-but-functional escape hatch.
+
 - [ ] Decide whether route context parity should stay page-view-only or expand.
   - Web attaches `$url` and `$referrer` as auto-properties on all events.
   - Flutter currently attaches `url` and `referrer` only to `page_view` events.

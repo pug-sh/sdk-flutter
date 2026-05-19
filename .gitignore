@@ -27,3 +27,6 @@ test-results/
 
 # Logs
 *.log
+
+# PR review working artifacts (regenerated per review session)
+pr-review.md

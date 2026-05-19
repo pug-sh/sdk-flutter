@@ -33,6 +33,9 @@ make check        # protos + format + analyze + test
 - All public SDK calls are best-effort and must never throw.
 - `Pug.identify(externalId, traits:)` logs failures and completes normally.
 - `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` manage identity/session/runtime state.
+- `Pug.track` is a callable `TrackNamespace`:
+  - `Pug.track('kind', props: {...})` — custom/dynamic event names (untyped, discouraged for well-known events).
+  - `Pug.track.<event>(...)` — one typed method per well-known event (codegen'd from `proto/`). Required fields are compile-time enforced; `extras: Map<String, Object?>` is always available for ad-hoc props.
 
 `PugPush` in `lib/src/push.dart` exposes provider-neutral push subscription, unsubscription, and notification event helpers.
 
@@ -160,6 +163,9 @@ Implemented parity:
 - Fuller mobile auto-properties through `PugAutoPropertyProvider`.
 - Explicit `Pug.flush()` and background/destroy best-effort flushes.
 - Dry run, sampling rate clamping, custom logger, injectable storage/transport/clock/ID generator.
+- Typed track API.
+  - Per-event typed methods on `Pug.track.*` codegen'd from the buf catalog.
+  - Untyped `Pug.track(kind, props:)` retained as the escape hatch with a debug-only hint on well-known kinds.
 
 Flutter/mobile-specific parity:
 
@@ -171,7 +177,6 @@ Flutter/mobile-specific parity:
 Remaining gaps:
 
 - Push packaging is at full web dependency-level parity, with the FCM provider isolated in the separate `pug_flutter_fcm` package.
-- Dart cannot match TypeScript's overloaded `TrackFn`/`WellKnownEventPropsMap` ergonomics directly. Current parity is constants plus runtime schema-aware validation.
 - No browser-style auto trackers for click, scroll, forms, rage click, dead click, page URL/referrer/title, or UA client hints. UTM-style campaign capture is implemented from app/deep links, but this SDK does not capture install referrer/deferred attribution automatically.
 
 Keep `TODO.md` synchronized when closing or adding parity items.
