@@ -158,8 +158,10 @@ Pug.track('cart_abandoned_v2', props: {'cartId': 'c-1', 'value': 41.0});
 ```
 
 Using `Pug.track(...)` with a well-known event name still works, but emits a
-debug-level hint suggesting the typed alternative. The hint is suppressed in
-release builds.
+debug-level hint suggesting the typed alternative. The hint is sent through the
+configured `PugLogger.debug` channel, so the default `DebugPrintPugLogger`
+drops it in release builds (via Flutter's `debugPrint`); custom loggers may see
+it in any build mode.
 
 ### Custom Events
 
@@ -231,7 +233,8 @@ The untyped `Pug.track(PugEventNames.*)` path continues to work but emits a
 debug-level hint recommending the typed alternative:
 
 ```dart
-// Still works — emits a debug hint in non-release builds.
+// Still works — emits a debug-level hint via PugLogger.debug.
+// The default DebugPrintPugLogger drops it in release builds.
 Pug.track(
   PugEventNames.purchase,
   props: {

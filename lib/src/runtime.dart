@@ -130,6 +130,8 @@ class PugClient with WidgetsBindingObserver {
   String? _currentRoute;
   String? _previousRoute;
 
+  /// Exposed so `Pug.logger` can surface the configured logger to callers
+  /// (notably `TrackNamespace`) post-init. Safe to call before `start()`.
   PugLogger get logger => _options.logger;
 
   @visibleForTesting
