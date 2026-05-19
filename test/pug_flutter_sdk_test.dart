@@ -9,6 +9,8 @@ import 'package:pug_flutter_sdk/src/connect_transport.dart';
 import 'package:pug_flutter_sdk/src/event_queue_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'test_doubles.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -684,49 +686,6 @@ Event fakeEvent(String kind) {
   );
 }
 
-class FakeTransport implements PugTransport {
-  final List<Event> sent = <Event>[];
-  final List<List<Event>> batches = <List<Event>>[];
-  final List<IdentifyRequest> identifies = <IdentifyRequest>[];
-  final List<PushSubscription> subscriptions = <PushSubscription>[];
-  Object? sendFailure;
-  Object? batchFailure;
-  PugTransportException? batchError;
-  PugTransportException? identifyError;
-
-  @override
-  Future<void> send(Event event) async {
-    if (sendFailure != null) {
-      throw sendFailure!;
-    }
-    sent.add(event);
-  }
-
-  @override
-  Future<void> sendBatch(List<Event> events) async {
-    if (batchFailure != null) {
-      throw batchFailure!;
-    }
-    if (batchError != null) {
-      throw batchError!;
-    }
-    batches.add(events);
-  }
-
-  @override
-  Future<void> identify(IdentifyRequest request) async {
-    if (identifyError != null) {
-      throw identifyError!;
-    }
-    identifies.add(request);
-  }
-
-  @override
-  Future<void> subscribeDevice(PushSubscription subscription) async {
-    subscriptions.add(subscription);
-  }
-}
-
 class FakeConnectTransport implements connect.Transport {
   Object? unaryError;
   connect.Headers? lastHeaders;
@@ -776,24 +735,6 @@ class SequenceIds implements PugIdGenerator {
   String nextId() {
     value += 1;
     return 'id-$value';
-  }
-}
-
-class CapturingLogger implements PugLogger {
-  final List<String> warnings = <String>[];
-  final List<String> errors = <String>[];
-
-  @override
-  void debug(String message) {}
-
-  @override
-  void error(String message, [Object? error, StackTrace? stackTrace]) {
-    errors.add(message);
-  }
-
-  @override
-  void warn(String message) {
-    warnings.add(message);
   }
 }
 

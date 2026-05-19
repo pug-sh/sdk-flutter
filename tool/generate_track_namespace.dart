@@ -1,0 +1,849 @@
+// Codegen for the typed `Pug.track.<event>(...)` namespace.
+//
+// Run from the repo root:
+//
+//   dart run tool/generate_track_namespace.dart
+//
+// The script scans the directory configured at the top of `main()` (currently
+// `proto/common/events/v1`), discovers every `message <X>Properties` block
+// that carries an explicit `option (common.events.v1.kind)` annotation,
+// filters to mobile-applicable platforms via
+// `option (common.events.v1.platforms)`, and rewrites:
+//
+//   * `lib/src/track_namespace.dart`  — full rewrite, preserving the
+//     hand-written scaffold (TrackContext, _merge, call, discouraged-path
+//     detector, _kindToDartMethodName) plus one typed method per event.
+//   * `lib/src/well_known_events.dart` — full rewrite (PugEventNames + alias).
+//   * `lib/src/events.dart`           — only the `wellKnownEventSchemas`
+//     block is rewritten in place between the marker `const
+//     wellKnownEventSchemas = <String, WellKnownEventSchema>{` line and the
+//     matching closing `};`.
+//
+// The script is intentionally a hand-rolled proto-source parser. It does
+// not depend on the buf CLI, protoc, or any third-party Dart package — only
+// `dart:io` from the SDK — so `dart run tool/generate_track_namespace.dart`
+// works on a fresh checkout with just the proto source files present.
+//
+// Output guarantees:
+//   * Method ordering and schema map entries are sorted by event kind so the
+//     output is stable across runs.
+//   * Generated files end with a trailing newline (matches `dart format`).
+//   * `dart format` should be run separately (the Makefile target chains it).
+
+import 'dart:io';
+
+void main() {
+  final repoRoot = _repoRoot();
+  final protoDir = File('${repoRoot.path}/proto/common/events/v1').uri;
+  final protoFiles =
+      Directory.fromUri(protoDir)
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.proto'))
+          .toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
+
+  final allEvents = <_Event>[];
+  final skipped = <String, int>{
+    'no_kind_option': 0,
+    'web_only': 0,
+    'non_mobile_only': 0,
+  };
+
+  for (final file in protoFiles) {
+    final discovered = _parseProto(file);
+    for (final event in discovered) {
+      if (event.kind == null) {
+        skipped['no_kind_option'] = skipped['no_kind_option']! + 1;
+        continue;
+      }
+      if (event.platforms.contains('PLATFORM_UNSPECIFIED')) {
+        stderr.writeln(
+          'FATAL: ${event.messageName} lists PLATFORM_UNSPECIFIED in platforms, '
+          'which is forbidden by the options.proto contract. Aborting.',
+        );
+        exit(2);
+      }
+      final mobile = _isMobileApplicable(event.platforms);
+      if (!mobile) {
+        if (event.platforms.length == 1 &&
+            event.platforms.single == 'PLATFORM_WEB') {
+          skipped['web_only'] = skipped['web_only']! + 1;
+        } else if (event.platforms.every((p) => p == 'PLATFORM_WEB')) {
+          skipped['web_only'] = skipped['web_only']! + 1;
+        } else {
+          skipped['non_mobile_only'] = skipped['non_mobile_only']! + 1;
+        }
+        continue;
+      }
+      allEvents.add(event);
+    }
+  }
+
+  // Collision check across kinds.
+  final byKind = <String, _Event>{};
+  for (final event in allEvents) {
+    final existing = byKind[event.kind!];
+    if (existing != null) {
+      stderr.writeln(
+        'FATAL: event kind "${event.kind}" produced by both '
+        '${existing.messageName} (${existing.sourceFile}) and '
+        '${event.messageName} (${event.sourceFile}). Aborting.',
+      );
+      exit(2);
+    }
+    byKind[event.kind!] = event;
+  }
+
+  allEvents.sort((a, b) => a.kind!.compareTo(b.kind!));
+
+  // Emit outputs.
+  final namespacePath = '${repoRoot.path}/lib/src/track_namespace.dart';
+  final wellKnownPath = '${repoRoot.path}/lib/src/well_known_events.dart';
+  final eventsPath = '${repoRoot.path}/lib/src/events.dart';
+
+  File(namespacePath).writeAsStringSync(_renderTrackNamespace(allEvents));
+  File(wellKnownPath).writeAsStringSync(_renderWellKnownEvents(allEvents));
+  _rewriteSchemaBlock(File(eventsPath), allEvents);
+
+  stdout.writeln('typed-track codegen summary:');
+  stdout.writeln('  included: ${allEvents.length}');
+  stdout.writeln('  skipped (no kind option): ${skipped['no_kind_option']}');
+  stdout.writeln('  skipped (web-only):       ${skipped['web_only']}');
+  stdout.writeln('  skipped (non-mobile only):${skipped['non_mobile_only']}');
+  stdout.writeln(
+    '  outputs: lib/src/track_namespace.dart, lib/src/well_known_events.dart, '
+    'lib/src/events.dart (wellKnownEventSchemas block)',
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Parsing.
+
+class _Event {
+  _Event({
+    required this.messageName,
+    required this.sourceFile,
+    required this.kind,
+    required this.platforms,
+    required this.fields,
+    required this.skippedFields,
+  });
+
+  final String messageName;
+  final String sourceFile;
+  final String? kind;
+  final List<String> platforms;
+  final List<_Field> fields;
+  final List<_SkippedField> skippedFields;
+}
+
+class _Field {
+  _Field({
+    required this.protoName,
+    required this.dartName,
+    required this.dartType,
+    required this.required,
+  });
+
+  final String protoName;
+  final String dartName;
+  final String dartType; // "String", "int", "double", "bool"
+  final bool required;
+
+  String get schemaFieldConstant => switch (dartType) {
+    'String' => '_stringField',
+    'int' => '_intField',
+    'double' => '_doubleField',
+    'bool' => '_boolField',
+    _ => throw StateError('unexpected dart type $dartType'),
+  };
+}
+
+class _SkippedField {
+  _SkippedField({required this.protoName, required this.protoType});
+  final String protoName;
+  final String protoType;
+}
+
+/// Returns one entry per top-level `message <X>Properties` block found in
+/// [file]. Messages without `option (common.events.v1.kind)` are returned
+/// with `kind == null` so the caller can count them in the skipped tally.
+List<_Event> _parseProto(File file) {
+  final content = file.readAsStringSync();
+  final results = <_Event>[];
+
+  // Match `message <Name>Properties { ... }` at top-level (column 0). We're
+  // intentionally not handling nested messages — the event protos don't
+  // use them.
+  final messageRe = RegExp(r'^message\s+(\w+)Properties\s*\{', multiLine: true);
+
+  for (final match in messageRe.allMatches(content)) {
+    final messageName = '${match.group(1)!}Properties';
+    final blockStart = match.end - 1; // points at the `{`
+    final blockEnd = _findMatchingBrace(content, blockStart);
+    if (blockEnd < 0) {
+      stderr.writeln(
+        'WARN: unmatched brace for $messageName in ${file.path}; skipping.',
+      );
+      continue;
+    }
+    final body = content.substring(blockStart + 1, blockEnd);
+    final event = _parseMessageBody(
+      body,
+      messageName: messageName,
+      sourceFile: file.uri.pathSegments.last,
+    );
+    results.add(event);
+  }
+
+  return results;
+}
+
+int _findMatchingBrace(String content, int openBraceIndex) {
+  var depth = 0;
+  for (var i = openBraceIndex; i < content.length; i++) {
+    final ch = content[i];
+    if (ch == '{') {
+      depth++;
+    } else if (ch == '}') {
+      depth--;
+      if (depth == 0) return i;
+    }
+  }
+  return -1;
+}
+
+final RegExp _kindRe = RegExp(
+  r'''option\s+\(\s*common\.events\.v1\.kind\s*\)\s*=\s*"([^"]+)"\s*;''',
+);
+
+final RegExp _platformRe = RegExp(
+  r'option\s+\(\s*common\.events\.v1\.platforms\s*\)\s*=\s*(\w+)\s*;',
+);
+
+/// A field declaration line — captures type, name, and optional inline
+/// options (used to detect `[(buf.validate.field).required = true]`).
+///
+/// We tolerate `repeated`/`map<...>` prefixes by capturing them in the type
+/// group. Multi-line `[...]` option blocks are matched via the brace-aware
+/// `_extractFieldLine` helper to skip nested braces inside `{ ... }`
+/// validation specs (e.g. `int32 = { gte: 0 lte: 100 }`).
+final RegExp _fieldHeadRe = RegExp(
+  r'^\s*((?:repeated\s+|map\s*<[^>]+>\s*)?[\w\.]+)\s+(\w+)\s*=\s*\d+',
+  multiLine: true,
+);
+
+_Event _parseMessageBody(
+  String body, {
+  required String messageName,
+  required String sourceFile,
+}) {
+  // Strip both single-line `//` and block `/* */` comments before regex
+  // extraction so a commented-out option line (e.g.
+  // `// option (common.events.v1.kind) = "old_name";` or a `/* ... */`
+  // block wrapping the same) cannot produce a phantom kind or platform match.
+  final strippedBody = body
+      .replaceAll(RegExp(r'/\*[\s\S]*?\*/'), '')
+      .replaceAll(RegExp(r'//[^\n]*'), '');
+
+  String? kind;
+  final platforms = <String>[];
+  final fields = <_Field>[];
+  final skippedFields = <_SkippedField>[];
+
+  // 1. Kind option (at most one).
+  final kindMatch = _kindRe.firstMatch(strippedBody);
+  if (kindMatch != null) {
+    kind = kindMatch.group(1);
+  }
+
+  // 2. Platform options (zero or more).
+  for (final m in _platformRe.allMatches(strippedBody)) {
+    platforms.add(m.group(1)!);
+  }
+
+  // 3. Field declarations.
+  //
+  // For each field-head match, we need to inspect the *full* declaration
+  // (which can span multiple lines if there's a `[...]` options block with
+  // nested braces). We do that by scanning forward from the match start until
+  // we hit a top-level `;` outside any brackets/braces.
+  final headMatches = _fieldHeadRe.allMatches(strippedBody).toList();
+  for (final head in headMatches) {
+    final fullDecl = _extractFieldDeclaration(strippedBody, head.start);
+    if (fullDecl == null) continue;
+
+    final protoType = head.group(1)!.trim();
+    final protoName = head.group(2)!;
+
+    // Skip well-known options/lines we already consumed.
+    if (protoName == 'kind' || protoName == 'platforms' || protoName == 'pii') {
+      continue;
+    }
+
+    final dartType = _mapProtoTypeToDart(protoType);
+    if (dartType == null) {
+      // Skip with warning; track for diagnostics.
+      skippedFields.add(
+        _SkippedField(protoName: protoName, protoType: protoType),
+      );
+      stderr.writeln(
+        'WARN: $messageName.$protoName has unsupported proto type '
+        '"$protoType"; skipping in generated method (extras still accepts it).',
+      );
+      continue;
+    }
+
+    final isRequired = _hasRequiredAnnotation(fullDecl);
+    fields.add(
+      _Field(
+        protoName: protoName,
+        dartName: _fieldNameToCamelCase(protoName),
+        dartType: dartType,
+        required: isRequired,
+      ),
+    );
+  }
+
+  return _Event(
+    messageName: messageName,
+    sourceFile: sourceFile,
+    kind: kind,
+    platforms: platforms,
+    fields: fields,
+    skippedFields: skippedFields,
+  );
+}
+
+/// Scans from [startIndex] forward in [body] and returns the substring up to
+/// and including the terminating `;` of a single field declaration, ignoring
+/// `;` that appear inside `{...}` blocks (validation specs). Returns null if
+/// no terminating `;` is found.
+String? _extractFieldDeclaration(String body, int startIndex) {
+  var depth = 0;
+  for (var i = startIndex; i < body.length; i++) {
+    final ch = body[i];
+    if (ch == '{' || ch == '[') {
+      depth++;
+    } else if (ch == '}' || ch == ']') {
+      if (depth > 0) depth--;
+    } else if (ch == ';' && depth == 0) {
+      return body.substring(startIndex, i + 1);
+    }
+  }
+  return null;
+}
+
+bool _hasRequiredAnnotation(String declaration) {
+  // Inline option style: `... [(buf.validate.field).required = true]`.
+  // We're lenient about whitespace.
+  return RegExp(
+    r'\(\s*buf\.validate\.field\s*\)\s*\.\s*required\s*=\s*true',
+  ).hasMatch(declaration);
+}
+
+/// Maps a proto scalar type to its Dart equivalent. Returns null for
+/// unsupported types (repeated, map, message, enum, Duration, etc.) so the
+/// caller can skip the field with a warning.
+String? _mapProtoTypeToDart(String protoType) {
+  // Reject any repeated / map prefixes outright — even if the element is a
+  // scalar, the generated method would need a List/Map shape we don't
+  // currently codegen.
+  if (protoType.startsWith('repeated ') || protoType.startsWith('map<')) {
+    return null;
+  }
+  switch (protoType) {
+    case 'string':
+      return 'String';
+    case 'int32':
+    case 'int64':
+    case 'sint32':
+    case 'sint64':
+    case 'uint32':
+    case 'uint64':
+    case 'fixed32':
+    case 'fixed64':
+    case 'sfixed32':
+    case 'sfixed64':
+      return 'int';
+    case 'double':
+    case 'float':
+      return 'double';
+    case 'bool':
+      return 'bool';
+    case 'bytes':
+      return null;
+    default:
+      // Custom messages (e.g. google.protobuf.Duration), enums, nested types.
+      return null;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Platform filter.
+
+bool _isMobileApplicable(List<String> platforms) {
+  if (platforms.isEmpty) return true; // "all platforms"
+  // PLATFORM_UNSPECIFIED is rejected upstream (see main()), so we only need
+  // to recognise the explicit mobile platforms here.
+  for (final p in platforms) {
+    if (p == 'PLATFORM_IOS' || p == 'PLATFORM_ANDROID') {
+      return true;
+    }
+  }
+  return false;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Naming.
+
+/// Dart reserved words and built-in identifiers that cannot be used as
+/// parameter names (or would be confusing). Override map maps a snake_case
+/// proto field name to a hand-picked Dart parameter name. If a proto field
+/// camel-cases into a reserved word and is not in this map, the script
+/// `stderr`s a fatal error so we add it to the override table.
+const Map<String, String> _fieldNameOverrides = <String, String>{
+  // `class` is a CSS-ish concept on click events, hence cssClass.
+  'class': 'cssClass',
+};
+
+const Set<String> _dartReservedWords = <String>{
+  'abstract',
+  'as',
+  'assert',
+  'async',
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'covariant',
+  'default',
+  'deferred',
+  'do',
+  'dynamic',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'extension',
+  'external',
+  'factory',
+  'false',
+  'final',
+  'finally',
+  'for',
+  'function',
+  'get',
+  'hide',
+  'if',
+  'implements',
+  'import',
+  'in',
+  'interface',
+  'is',
+  'library',
+  'mixin',
+  'new',
+  'null',
+  'of',
+  'on',
+  'operator',
+  'part',
+  'rethrow',
+  'return',
+  'set',
+  'show',
+  'static',
+  'super',
+  'switch',
+  'sync',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typedef',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+  'late',
+  'required',
+  'sealed',
+  'base',
+};
+
+String _fieldNameToCamelCase(String snake) {
+  // 1. Hand-rolled override wins (collision-driven).
+  final override = _fieldNameOverrides[snake];
+  if (override != null) return override;
+
+  // 2. Standard snake_case → camelCase.
+  final parts = snake.split('_').where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return snake;
+  final camel =
+      parts.first +
+      parts.skip(1).map((p) => p[0].toUpperCase() + p.substring(1)).join();
+
+  // 3. Reserved-word collision detection.
+  if (_dartReservedWords.contains(camel)) {
+    stderr.writeln(
+      'FATAL: proto field "$snake" camel-cases to reserved Dart word '
+      '"$camel". Add an entry to _fieldNameOverrides in '
+      'tool/generate_track_namespace.dart.',
+    );
+    exit(2);
+  }
+  return camel;
+}
+
+/// Converts a snake_case event kind to the matching Dart method name on
+/// `TrackNamespace`. Mirrors `TrackNamespace._kindToDartMethodName` so we
+/// stay consistent between generated method names and the discouraged-path
+/// hint text.
+String _kindToDartMethodName(String snake) {
+  final parts = snake.split('_').where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return snake;
+  if (parts.length == 1) return parts.first;
+  return parts.first +
+      parts.skip(1).map((p) => p[0].toUpperCase() + p.substring(1)).join();
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Emission — track_namespace.dart.
+
+String _renderTrackNamespace(List<_Event> events) {
+  final buf = StringBuffer();
+  buf.writeln('// AUTOGENERATED — DO NOT EDIT.');
+  buf.writeln('//');
+  buf.writeln(
+    '// Regenerated by `make typed-track` (see tool/generate_track_namespace.dart).',
+  );
+  buf.writeln('// The hand-written scaffold (TrackContext, _merge, call,');
+  buf.writeln(
+    '// discouraged-path detector, _kindToDartMethodName) is preserved verbatim',
+  );
+  buf.writeln(
+    '// by the codegen template; only the per-event methods are derived from protos.',
+  );
+  buf.writeln();
+  buf.writeln("import 'package:meta/meta.dart';");
+  buf.writeln();
+  buf.writeln("import 'configuration.dart';");
+  buf.writeln("import 'contracts.dart';");
+  buf.writeln("import 'events.dart';");
+  buf.writeln("import 'well_known_events.dart';");
+  buf.writeln();
+  buf.writeln(
+    '/// The subset of `Pug` that `TrackNamespace` depends on. `Pug` implements',
+  );
+  buf.writeln(
+    '/// this. Defining it here (rather than importing `Pug`) breaks the circular',
+  );
+  buf.writeln(
+    '/// import between `pug.dart` and the codegen-target `track_namespace.dart`.',
+  );
+  buf.writeln('abstract interface class TrackContext {');
+  buf.writeln('  void capture(');
+  buf.writeln('    String kind, {');
+  buf.writeln('    Map<String, Object?> props,');
+  buf.writeln('    TrackOptions options,');
+  buf.writeln('  });');
+  buf.writeln();
+  buf.writeln('  PugLogger get logger;');
+  buf.writeln('}');
+  buf.writeln();
+  buf.writeln('class TrackNamespace {');
+  buf.writeln('  const TrackNamespace(this._ctx);');
+  buf.writeln('  final TrackContext _ctx;');
+  buf.writeln();
+  buf.writeln(
+    '  /// Tracks a custom event by string kind. Matches the legacy `Pug.track`',
+  );
+  buf.writeln(
+    '  /// signature so that `Pug.track(\'kind\', props: ...)` continues to work.',
+  );
+  buf.writeln('  void call(');
+  buf.writeln('    String kind, {');
+  buf.writeln('    Map<String, Object?> props = const {},');
+  buf.writeln('    TrackOptions options = const TrackOptions(),');
+  buf.writeln('  }) {');
+  buf.writeln('    _warnDiscouragedPathOnce(kind);');
+  buf.writeln('    _ctx.capture(kind, props: props, options: options);');
+  buf.writeln('  }');
+  buf.writeln();
+  buf.writeln('  static final Set<String> _hintedKinds = <String>{};');
+  buf.writeln();
+  buf.writeln('  @visibleForTesting');
+  buf.writeln(
+    '  static void resetHintedKindsForTest() => _hintedKinds.clear();',
+  );
+  buf.writeln();
+  buf.writeln('  void _warnDiscouragedPathOnce(String kind) {');
+  buf.writeln('    if (!wellKnownEventSchemas.containsKey(kind)) return;');
+  buf.writeln('    if (!_hintedKinds.add(kind)) return;');
+  buf.writeln('    final dartName = _kindToDartMethodName(kind);');
+  buf.writeln('    _ctx.logger.debug(');
+  buf.writeln(
+    "      \"Pug.track('\$kind', ...) — consider Pug.track.\$dartName(...) for \"",
+  );
+  buf.writeln("      'compile-time typed properties.',");
+  buf.writeln('    );');
+  buf.writeln('  }');
+  buf.writeln();
+  buf.writeln('  static String _kindToDartMethodName(String snake) {');
+  buf.writeln(
+    '    final parts = snake.split(\'_\').where((p) => p.isNotEmpty).toList();',
+  );
+  buf.writeln(
+    '    if (parts.isEmpty) return snake; // degenerate; pass through unchanged',
+  );
+  buf.writeln('    if (parts.length == 1) return parts.first;');
+  buf.writeln('    return parts.first +');
+  buf.writeln(
+    '        parts.skip(1).map((p) => p[0].toUpperCase() + p.substring(1)).join();',
+  );
+  buf.writeln('  }');
+
+  // Per-event typed methods.
+  for (final event in events) {
+    buf.writeln();
+    buf.write(_renderMethod(event));
+  }
+
+  buf.writeln();
+  buf.writeln(
+    '  /// Merges [extras] behind [explicit], dropping any extras key that collides',
+  );
+  buf.writeln(
+    '  /// with an explicit named arg and logging a WARN message for each dropped key.',
+  );
+  buf.writeln('  ///');
+  buf.writeln(
+    '  /// [methodName] is the camelCase Dart method name (e.g. `addToCart`) — not',
+  );
+  buf.writeln(
+    '  /// the wire-format kind — so log messages match the call site users wrote.',
+  );
+  buf.writeln('  Map<String, Object?> _merge({');
+  buf.writeln('    required String methodName,');
+  buf.writeln('    required Map<String, Object?> explicit,');
+  buf.writeln('    required Map<String, Object?> extras,');
+  buf.writeln('  }) {');
+  buf.writeln('    if (extras.isEmpty) return explicit;');
+  buf.writeln('    final result = <String, Object?>{};');
+  buf.writeln('    for (final entry in extras.entries) {');
+  buf.writeln('      if (explicit.containsKey(entry.key)) {');
+  buf.writeln('        _ctx.logger.warn(');
+  buf.writeln(
+    "          'Pug.track.\$methodName: extras key \"\${entry.key}\" overridden by explicit named arg.',",
+  );
+  buf.writeln('        );');
+  buf.writeln('        continue;');
+  buf.writeln('      }');
+  buf.writeln('      result[entry.key] = entry.value;');
+  buf.writeln('    }');
+  buf.writeln('    result.addAll(explicit);');
+  buf.writeln('    return result;');
+  buf.writeln('  }');
+  buf.writeln('}');
+
+  return buf.toString();
+}
+
+String _renderMethod(_Event event) {
+  final kind = event.kind!;
+  final dartMethodName = _kindToDartMethodName(kind);
+  final requiredFields = event.fields.where((f) => f.required).toList();
+  final optionalFields = event.fields.where((f) => !f.required).toList();
+
+  final buf = StringBuffer();
+  buf.writeln('  /// Tracks a `$kind` event.');
+  buf.writeln('  ///');
+  buf.writeln(
+    '  /// Named args define the typed schema fields and always win over [extras].',
+  );
+  buf.writeln(
+    '  /// Any [extras] key that collides with a named arg is dropped and logged',
+  );
+  buf.writeln('  /// at WARN level (the named arg always wins).');
+  buf.writeln('  void $dartMethodName({');
+  for (final f in requiredFields) {
+    buf.writeln('    required ${f.dartType} ${f.dartName},');
+  }
+  for (final f in optionalFields) {
+    buf.writeln('    ${f.dartType}? ${f.dartName},');
+  }
+  buf.writeln('    Map<String, Object?> extras = const {},');
+  buf.writeln('    TrackOptions options = const TrackOptions(),');
+  buf.writeln('  }) {');
+  // Use PugEventNames.<camel> when the camel-case name is a valid Dart
+  // identifier (which it always is for our snake_case kinds — _kindToDartMethodName
+  // is identity-on-empty and produces lowerCamelCase otherwise).
+  final eventConst = 'PugEventNames.$dartMethodName';
+  buf.writeln('    const eventName = $eventConst;');
+  buf.writeln('    _ctx.capture(');
+  buf.writeln('      eventName,');
+  buf.writeln('      props: _merge(');
+  buf.writeln("        methodName: '$dartMethodName',");
+  buf.writeln('        explicit: <String, Object?>{');
+  for (final f in requiredFields) {
+    buf.writeln("          '${f.dartName}': ${f.dartName},");
+  }
+  for (final f in optionalFields) {
+    buf.writeln(
+      "          if (${f.dartName} != null) '${f.dartName}': ${f.dartName},",
+    );
+  }
+  buf.writeln('        },');
+  buf.writeln('        extras: extras,');
+  buf.writeln('      ),');
+  buf.writeln('      options: options,');
+  buf.writeln('    );');
+  buf.writeln('  }');
+  return buf.toString();
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Emission — well_known_events.dart.
+
+String _renderWellKnownEvents(List<_Event> events) {
+  final buf = StringBuffer();
+  buf.writeln('// AUTOGENERATED — DO NOT EDIT.');
+  buf.writeln('//');
+  buf.writeln(
+    '// Regenerated by `make typed-track` (see tool/generate_track_namespace.dart).',
+  );
+  buf.writeln();
+  buf.writeln("import 'events.dart';");
+  buf.writeln();
+  buf.writeln('/// String constants for every well-known mobile-applicable');
+  buf.writeln(
+    '/// event kind. Prefer these constants over raw kind strings — the',
+  );
+  buf.writeln('/// typed `Pug.track.<event>(...)` methods use them too.');
+  buf.writeln('class PugEventNames {');
+  buf.writeln('  const PugEventNames._();');
+  buf.writeln();
+  for (final event in events) {
+    final dartName = _kindToDartMethodName(event.kind!);
+    buf.writeln("  static const $dartName = '${event.kind}';");
+  }
+  buf.writeln();
+  buf.writeln('  /// The full set of well-known event kind strings, in the');
+  buf.writeln('  /// same order as the per-event constants.');
+  buf.writeln('  static const all = <String>[');
+  for (final event in events) {
+    final dartName = _kindToDartMethodName(event.kind!);
+    buf.writeln('    $dartName,');
+  }
+  buf.writeln('  ];');
+  buf.writeln();
+  buf.writeln(
+    '  /// Returns true when [kind] is a well-known event kind that has a typed',
+  );
+  buf.writeln(
+    '  /// `Pug.track.<event>(...)` method and a `wellKnownEventSchemas` entry.',
+  );
+  buf.writeln('  static bool isWellKnown(String kind) =>');
+  buf.writeln('      wellKnownEventSchemas.containsKey(kind);');
+  buf.writeln('}');
+  buf.writeln();
+  buf.writeln(
+    '/// Convenience alias for a free-form property map. Provided so caller',
+  );
+  buf.writeln('/// code can spell properties consistently as `PugProperties`.');
+  buf.writeln('typedef PugProperties = Map<String, Object?>;');
+  return buf.toString();
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Emission — events.dart (in-place block rewrite).
+
+void _rewriteSchemaBlock(File eventsFile, List<_Event> events) {
+  final original = eventsFile.readAsStringSync();
+  const startMarker =
+      'const wellKnownEventSchemas = <String, WellKnownEventSchema>{';
+  final startIndex = original.indexOf(startMarker);
+  if (startIndex < 0) {
+    stderr.writeln(
+      'FATAL: could not find marker "$startMarker" in ${eventsFile.path}',
+    );
+    exit(2);
+  }
+  // Find the matching `};` after the opening `{`. Use brace counting so a
+  // nested `{...}` inside a schema entry doesn't confuse the scan.
+  final openBraceIndex = startIndex + startMarker.length - 1;
+  final closeBraceIndex = _findMatchingBrace(original, openBraceIndex);
+  if (closeBraceIndex < 0) {
+    stderr.writeln(
+      'FATAL: could not find matching brace for wellKnownEventSchemas in ${eventsFile.path}',
+    );
+    exit(2);
+  }
+  // The closing brace is followed by `;` in the source.
+  final endIndex = closeBraceIndex + 1;
+
+  // Ensure `_boolField` is declared. If absent, insert it next to the other
+  // field constants in the same file.
+  var head = original.substring(0, startIndex);
+  if (!head.contains('const _boolField =')) {
+    const intDecl =
+        'const _intField = WellKnownPropertyField(WellKnownPropertyType.int32);';
+    final intIdx = head.indexOf(intDecl);
+    if (intIdx < 0) {
+      stderr.writeln(
+        'FATAL: could not find `_intField` declaration in ${eventsFile.path} '
+        'to anchor the `_boolField` insertion. Please add it manually.',
+      );
+      exit(2);
+    }
+    final insertAt = intIdx + intDecl.length;
+    const boolDecl =
+        '\nconst _boolField = WellKnownPropertyField(WellKnownPropertyType.bool);';
+    head = head.substring(0, insertAt) + boolDecl + head.substring(insertAt);
+  }
+
+  final tail = original.substring(endIndex + 1); // skip the closing `;` too
+  final newBlock = _renderSchemaMap(events);
+  final updated = '$head$newBlock$tail';
+  eventsFile.writeAsStringSync(updated);
+}
+
+String _renderSchemaMap(List<_Event> events) {
+  final buf = StringBuffer();
+  buf.writeln('const wellKnownEventSchemas = <String, WellKnownEventSchema>{');
+  for (final event in events) {
+    if (event.fields.isEmpty) {
+      buf.writeln("  '${event.kind}': WellKnownEventSchema({}),");
+    } else {
+      buf.writeln("  '${event.kind}': WellKnownEventSchema({");
+      for (final f in event.fields) {
+        buf.writeln("    '${f.dartName}': ${f.schemaFieldConstant},");
+      }
+      buf.writeln('  }),');
+    }
+  }
+  buf.write('};');
+  return buf.toString();
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Repo root resolution.
+
+Directory _repoRoot() {
+  // The script is invoked as `dart run tool/generate_track_namespace.dart`
+  // from the repo root, so use cwd; verify by spotting the lib/ directory.
+  final cwd = Directory.current;
+  if (!Directory('${cwd.path}/proto/common/events/v1').existsSync()) {
+    stderr.writeln(
+      'FATAL: run this script from the repo root. Current: ${cwd.path}',
+    );
+    exit(2);
+  }
+  return cwd;
+}
