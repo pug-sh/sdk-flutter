@@ -47,6 +47,8 @@ void main() {
   });
 
   group('discouraged-path detector', () {
+    setUp(TrackNamespace.resetHintedKindsForTest);
+
     test('logs debug hint when a well-known kind is used via untyped track',
         () async {
       final logger = CapturingLogger();
