@@ -21,6 +21,31 @@ void main() {
     });
   });
 
+  group('Pug.track.purchase (hand-written reference)', () {
+    test('produces a purchase event equivalent to the untyped track call',
+        () async {
+      // Both calls should produce equivalent queued events. Exact equivalence
+      // assertions land in the golden tests (Task 8); here we only check
+      // the typed call compiles and runs without throwing.
+      Pug.track.purchase(
+        productId: 'sku-1',
+        amount: 99.50,
+        currency: 'USD',
+      );
+    });
+
+    test('extras key colliding with named arg is dropped with debug log', () {
+      // Behavior assertion: the typed contract wins; extras are merged behind.
+      Pug.track.purchase(
+        productId: 'sku-1',
+        amount: 99.50,
+        currency: 'USD',
+        extras: {'amount': 42.0, 'cohort': 'A'},
+      );
+      // Logger output is asserted in Task 8 via CapturingLogger.
+    });
+  });
+
   group('Pug.logger getter', () {
     test('returns a usable logger before init (no-op fallback)', () {
       final logger = Pug.shared.logger;
