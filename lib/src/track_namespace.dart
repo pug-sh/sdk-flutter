@@ -32,4 +32,53 @@ class TrackNamespace {
   }) {
     _ctx.capture(kind, props: props, options: options);
   }
+
+  /// Tracks a `purchase` event.
+  ///
+  /// Named args define the required schema fields and always win over [extras].
+  /// Any [extras] key that collides with a named arg is silently dropped and
+  /// logged at DEBUG level.
+  void purchase({
+    required String productId,
+    required double amount,
+    required String currency,
+    Map<String, Object?> extras = const {},
+    TrackOptions options = const TrackOptions(),
+  }) {
+    _ctx.capture(
+      'purchase',
+      props: _merge(
+        eventName: 'purchase',
+        explicit: <String, Object?>{
+          'productId': productId,
+          'amount': amount,
+          'currency': currency,
+        },
+        extras: extras,
+      ),
+      options: options,
+    );
+  }
+
+  /// Merges [extras] behind [explicit], dropping any extras key that collides
+  /// with an explicit named arg and logging a DEBUG message for each dropped key.
+  Map<String, Object?> _merge({
+    required String eventName,
+    required Map<String, Object?> explicit,
+    required Map<String, Object?> extras,
+  }) {
+    if (extras.isEmpty) return explicit;
+    final result = <String, Object?>{};
+    for (final entry in extras.entries) {
+      if (explicit.containsKey(entry.key)) {
+        _ctx.logger.debug(
+          'Pug.track.$eventName: extras key "${entry.key}" overridden by explicit named arg.',
+        );
+        continue;
+      }
+      result[entry.key] = entry.value;
+    }
+    result.addAll(explicit);
+    return result;
+  }
 }
