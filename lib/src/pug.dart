@@ -18,6 +18,8 @@ class Pug {
 
   PugClient? get clientOrNull => _client;
 
+  PugLogger get logger => _client?.logger ?? _fallbackLogger;
+
   static Future<void> init(String projectId, PugOptions options) =>
       _shared.initialize(projectId, options);
 
