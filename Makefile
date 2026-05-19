@@ -3,7 +3,7 @@ PROTO_OUT := lib/src/gen
 PROTO_FILES := $(shell find proto -type f -name '*.proto' | sort)
 WELL_KNOWN_PROTO_FILES := google/protobuf/descriptor.proto
 
-.PHONY: protos sync-protos typed-track format analyze test check
+.PHONY: protos sync-protos typed-track check-codegen format analyze test check
 
 sync-protos:
 	@command -v buf >/dev/null || (echo "buf CLI is required; install: brew install bufbuild/buf/buf" && exit 1)
@@ -24,6 +24,14 @@ typed-track:
 	dart run tool/generate_track_namespace.dart
 	dart format lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/events.dart
 
+check-codegen:
+	$(MAKE) typed-track
+	@if ! git diff --exit-code -- lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/events.dart > /dev/null; then \
+		echo "Codegen drift detected. Run 'make typed-track' and commit the result."; \
+		git diff -- lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/events.dart; \
+		exit 1; \
+	fi
+
 format:
 	dart format lib test
 
@@ -33,4 +41,4 @@ analyze:
 test:
 	flutter test
 
-check: protos format analyze test
+check: protos check-codegen format analyze test
