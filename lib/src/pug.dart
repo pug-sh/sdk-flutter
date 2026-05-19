@@ -8,7 +8,7 @@ import 'runtime.dart';
 import 'shared_preferences_storage.dart';
 import 'track_namespace.dart';
 
-class Pug {
+class Pug implements TrackContext {
   Pug._();
 
   static final Pug _shared = Pug._();
@@ -21,6 +21,7 @@ class Pug {
   PugClient? get clientOrNull => _client;
 
   @internal
+  @override
   PugLogger get logger => _client?.logger ?? _fallbackLogger;
 
   static Future<void> init(String projectId, PugOptions options) =>
@@ -79,6 +80,8 @@ class Pug {
     }
   }
 
+  @internal
+  @override
   void capture(
     String kind, {
     Map<String, Object?> props = const {},

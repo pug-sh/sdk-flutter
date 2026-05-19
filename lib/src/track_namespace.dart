@@ -4,11 +4,24 @@
 // During Task 4 it is hand-written as a scaffold containing only `call`.
 
 import 'configuration.dart';
-import 'pug.dart';
+import 'contracts.dart';
+
+/// The subset of `Pug` that `TrackNamespace` depends on. `Pug` implements
+/// this. Defining it here (rather than importing `Pug`) breaks the circular
+/// import between `pug.dart` and the codegen-target `track_namespace.dart`.
+abstract interface class TrackContext {
+  void capture(
+    String kind, {
+    Map<String, Object?> props,
+    TrackOptions options,
+  });
+
+  PugLogger get logger;
+}
 
 class TrackNamespace {
-  const TrackNamespace(this._pug);
-  final Pug _pug;
+  const TrackNamespace(this._ctx);
+  final TrackContext _ctx;
 
   /// Tracks a custom event by string kind. Matches the legacy `Pug.track`
   /// signature so that `Pug.track('kind', props: ...)` continues to work.
@@ -17,6 +30,6 @@ class TrackNamespace {
     Map<String, Object?> props = const {},
     TrackOptions options = const TrackOptions(),
   }) {
-    _pug.capture(kind, props: props, options: options);
+    _ctx.capture(kind, props: props, options: options);
   }
 }
