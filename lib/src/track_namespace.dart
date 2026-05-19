@@ -5,6 +5,7 @@
 
 import 'configuration.dart';
 import 'contracts.dart';
+import 'events.dart';
 
 /// The subset of `Pug` that `TrackNamespace` depends on. `Pug` implements
 /// this. Defining it here (rather than importing `Pug`) breaks the circular
@@ -30,7 +31,30 @@ class TrackNamespace {
     Map<String, Object?> props = const {},
     TrackOptions options = const TrackOptions(),
   }) {
+    _warnDiscouragedPathOnce(kind);
     _ctx.capture(kind, props: props, options: options);
+  }
+
+  static final Set<String> _hintedKinds = <String>{};
+
+  void _warnDiscouragedPathOnce(String kind) {
+    if (!wellKnownEventSchemas.containsKey(kind)) return;
+    if (!_hintedKinds.add(kind)) return;
+    final dartName = _kindToDartMethodName(kind);
+    _ctx.logger.debug(
+      "Pug.track('$kind', ...) — consider Pug.track.$dartName(...) for "
+      'compile-time typed properties.',
+    );
+  }
+
+  static String _kindToDartMethodName(String snake) {
+    final parts = snake.split('_');
+    if (parts.length == 1) return parts.first;
+    return parts.first +
+        parts.skip(1).map((p) {
+          if (p.isEmpty) return '';
+          return p[0].toUpperCase() + p.substring(1);
+        }).join();
   }
 
   /// Tracks a `purchase` event.
