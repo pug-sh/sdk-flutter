@@ -29,6 +29,7 @@ Future<List<Map<String, Object?>>> _captureRequests(
   await Pug.flush();
   final events = transport.batches.expand((batch) => batch).toList();
   Pug.destroy();
+  await Future<void>.delayed(Duration.zero);  // drain microtasks from destroy's unawaited flushAll
   return events.map((e) => e.toJson()).toList();
 }
 
@@ -201,6 +202,10 @@ void main() {
     // Reset hint state so the discouraged-path detector logs once-per-process
     // doesn't pollute these tests.
     setUp(TrackNamespace.resetHintedKindsForTest);
+    tearDown(() async {
+      Pug.destroy();
+      await Future<void>.delayed(Duration.zero);  // drain microtasks from destroy's unawaited flushAll
+    });
 
     for (final kind in PugEventNames.all) {
       test('untyped Pug.track("$kind", ...) produces a queued payload', () async {
@@ -216,9 +221,11 @@ void main() {
           ),
         );
 
-        final schema = wellKnownEventSchemas[kind]!;
+        final schema = wellKnownEventSchemas[kind];
+        expect(schema, isNotNull,
+            reason: 'wellKnownEventSchemas is missing entry for "$kind"');
         final syntheticProps = <String, Object?>{
-          for (final entry in schema.fields.entries)
+          for (final entry in schema!.fields.entries)
             entry.key: _sampleValue(entry.value.type),
         };
 
@@ -233,8 +240,6 @@ void main() {
           reason: 'Untyped Pug.track for kind "$kind" produced no requests',
         );
         expect(allEvents.first.kind, equals(kind));
-
-        Pug.destroy();
       });
     }
   });
@@ -243,6 +248,17 @@ void main() {
     // Reset hint state so the discouraged-path detector does not log from
     // untyped calls in this group and interfere with other tests.
     setUp(TrackNamespace.resetHintedKindsForTest);
+    tearDown(() async {
+      Pug.destroy();
+      await Future<void>.delayed(Duration.zero);  // drain microtasks from destroy's unawaited flushAll
+    });
+
+    // NOTE: These spot checks compare the Dart-model `Event.toJson()` output
+    // (post merge, pre protobuf encode). They do NOT exercise PugProtoCodec or
+    // HttpPugTransport. A bug in proto encoding that only manifests on typed
+    // calls would not be caught here — that's intentionally the protobuf
+    // wire-format layer's responsibility, validated separately at integration
+    // test boundaries.
 
     test('Pug.track.purchase ≈ Pug.track("purchase", ...)', () async {
       final typedReqs = await _captureRequests(() {
