@@ -130,6 +130,8 @@ class PugClient with WidgetsBindingObserver {
   String? _currentRoute;
   String? _previousRoute;
 
+  PugLogger get logger => _options.logger;
+
   @visibleForTesting
   PugEventQueue get queue => _queue;
 
