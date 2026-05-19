@@ -3,9 +3,12 @@ import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
 class CapturingLogger implements PugLogger {
   final List<String> warnings = <String>[];
   final List<String> errors = <String>[];
+  final List<String> debugs = <String>[];
 
   @override
-  void debug(String message) {}
+  void debug(String message) {
+    debugs.add(message);
+  }
 
   @override
   void error(String message, [Object? error, StackTrace? stackTrace]) {

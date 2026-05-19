@@ -46,6 +46,58 @@ void main() {
     });
   });
 
+  group('discouraged-path detector', () {
+    test('logs debug hint when a well-known kind is used via untyped track',
+        () async {
+      final logger = CapturingLogger();
+      final transport = FakeTransport();
+      await Pug.init(
+        'project',
+        PugOptions(
+          apiKey: 'key',
+          logger: logger,
+          transport: transport,
+          storage: MemoryPugStorage(),
+          autoTrack: false,
+        ),
+      );
+
+      Pug.track('purchase', props: {'productId': 'sku-1'});
+      Pug.track('purchase', props: {'productId': 'sku-2'}); // second call — no second log
+
+      final hints = logger.debugs.where(
+        (m) => m.contains('consider Pug.track.purchase'),
+      ).toList();
+      expect(hints, hasLength(1));
+
+      Pug.destroy();
+    });
+
+    test('does not log for fully custom events', () async {
+      final logger = CapturingLogger();
+      final transport = FakeTransport();
+      await Pug.init(
+        'project',
+        PugOptions(
+          apiKey: 'key',
+          logger: logger,
+          transport: transport,
+          storage: MemoryPugStorage(),
+          autoTrack: false,
+        ),
+      );
+
+      Pug.track('cart_abandoned_v2', props: {'cartId': 'c-1'});
+
+      final hints = logger.debugs.where(
+        (m) => m.contains('consider Pug.track'),
+      ).toList();
+      expect(hints, isEmpty);
+
+      Pug.destroy();
+    });
+  });
+
   group('Pug.logger getter', () {
     test('returns a usable logger before init (no-op fallback)', () {
       final logger = Pug.shared.logger;
