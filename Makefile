@@ -3,7 +3,7 @@ PROTO_OUT := lib/src/gen
 PROTO_FILES := $(shell find proto -type f -name '*.proto' | sort)
 WELL_KNOWN_PROTO_FILES := google/protobuf/descriptor.proto
 
-.PHONY: protos sync-protos typed-track check-codegen format analyze test check
+.PHONY: protos sync-protos typed-track check-codegen format analyze test check ci
 
 sync-protos:
 	@command -v buf >/dev/null || (echo "buf CLI is required; install: brew install bufbuild/buf/buf" && exit 1)
@@ -41,4 +41,13 @@ analyze:
 test:
 	flutter test
 
-check: protos check-codegen format analyze test
+# `check` is the routine local-dev target. It does NOT regenerate protobufs
+# or codegen — instead, `check-codegen` re-runs the typed-track generator and
+# diffs against the committed files, so it catches the case where the proto
+# sources were updated but `make typed-track` was not re-run. Run `make
+# protos` manually before commit when proto sources change.
+check: check-codegen format analyze test
+
+# `ci` is the strict CI target: regenerates protobufs from scratch and then
+# runs every other check. Requires `protoc` + `protoc-gen-dart` on PATH.
+ci: protos check-codegen format analyze test
