@@ -126,7 +126,7 @@ Anonymous profile IDs are prefixed with `anon-`. The first successful `identify(
 
 ### Push
 
-Push is provider-neutral at the API level through `PushProvider`. The FCM implementation is provided in a separate add-on package, `pug_flutter_fcm`. To use FCM, users must depend on both `pug_sdk` and `pug_flutter_fcm`, achieving full dependency-level optionality.
+Push is provider-neutral at the API level through `PushProvider`. No concrete provider ships with the SDK; host apps supply their own `PushProvider` implementation. An FCM provider can be added as a separate add-on package when notifications are introduced.
 
 Notification helper events:
 
@@ -171,12 +171,11 @@ Flutter/mobile-specific parity:
 
 - App lifecycle auto tracking for `app_open` and `app_close`.
 - `SharedPreferencesPugStorage` via async `Pug.init(...)`.
-- Built-in FCM provider through `pug_flutter_fcm.dart`.
 - Automatic campaign capture from app links/deep links using `app_links` 3.x.
 
 Remaining gaps:
 
-- Push packaging is at full web dependency-level parity, with the FCM provider isolated in the separate `pug_flutter_fcm` package.
+- No concrete push provider ships with the SDK. The push API is provider-neutral; an FCM (or other) provider will be packaged as a separate add-on when notifications are introduced.
 - No browser-style auto trackers for click, scroll, forms, rage click, dead click, page URL/referrer/title, or UA client hints. UTM-style campaign capture is implemented from app/deep links, but this SDK does not capture install referrer/deferred attribution automatically.
 
 Keep `TODO.md` synchronized when closing or adding parity items.

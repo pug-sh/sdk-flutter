@@ -14,7 +14,6 @@ Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`.
 - Batched protobuf transport with `x-api-key` authentication.
 - `identify()` profile merge semantics with first-call anonymous ID linking.
 - Provider-neutral push registration.
-- Built-in Firebase Cloud Messaging provider.
 - Automatic campaign capture from app links and deep links.
 - Notification received, opened, and dismissed event helpers.
 - Injectable storage, transport, clock, ID generator, logger, and push provider for tests.
@@ -30,18 +29,6 @@ dependencies:
   pug_sdk:
     git:
       url: git@github.com:pug-sh/sdk-flutter.git
-```
-
-If you use FCM, configure Firebase for your Flutter app and initialize Firebase before asking FCM for a token:
-
-```dart
-import 'package:firebase_core/firebase_core.dart';
-
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  runApp(const App());
-}
 ```
 
 ## Initialize
@@ -329,57 +316,6 @@ await PugPush.subscribe(
   ),
 );
 ```
-
-## Firebase Cloud Messaging
-
-Use `FcmPushProvider` for Firebase Cloud Messaging:
-
-```dart
-import 'package:pug_flutter_fcm/pug_flutter_fcm.dart';
-
-final fcm = FcmPushProvider();
-
-await fcm.requestPermission();
-await PugPush.subscribe(fcm);
-```
-
-Unsubscribe deletes the local FCM token:
-
-```dart
-await PugPush.unsubscribe(fcm);
-```
-
-Track notification lifecycle events from Firebase callbacks:
-
-```dart
-FirebaseMessaging.onMessage.listen((message) {
-  final fcm = FcmPushProvider();
-  PugPush.trackNotificationReceived(fcm.notificationData(message));
-});
-
-FirebaseMessaging.onMessageOpenedApp.listen((message) {
-  final fcm = FcmPushProvider();
-  PugPush.trackNotificationOpened(fcm.notificationData(message));
-});
-```
-
-For background handlers, initialize Firebase and Pug before tracking:
-
-```dart
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  await Pug.init(
-    'project-id',
-    const PugOptions(apiKey: 'pug_api_key'),
-  );
-
-  final fcm = FcmPushProvider();
-  PugPush.trackNotificationReceived(fcm.notificationData(message));
-}
-```
-
-`notification_clicked` events require a `campaignId`. If no `campaignId` is present, the SDK sends `(unknown)`.
 
 ## Custom Transport Or Storage
 
