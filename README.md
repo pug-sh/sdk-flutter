@@ -27,9 +27,9 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  pug_flutter_sdk:
+  pug_sdk:
     git:
-      url: git@github.com:fivebitsio/pug-flutter-sdk.git
+      url: git@github.com:pug-sh/sdk-flutter.git
 ```
 
 If you use FCM, configure Firebase for your Flutter app and initialize Firebase before asking FCM for a token:
@@ -47,7 +47,7 @@ Future<void> main() async {
 ## Initialize
 
 ```dart
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
+import 'package:pug_sdk/pug_sdk.dart';
 
 Future<void> configurePug() async {
   await Pug.init(

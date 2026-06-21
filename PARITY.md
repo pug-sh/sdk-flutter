@@ -314,11 +314,11 @@ When changing parity-sensitive behavior:
 
 - Update this document.
 - Update `TODO.md` if a gap is closed or a new gap is accepted.
-- Add tests in `test/pug_flutter_sdk_test.dart` for shared semantics or mobile substitutions.
+- Add tests in `test/pug_sdk_test.dart` for shared semantics or mobile substitutions.
 - Prefer injected fakes for platform features.
 
 ## Source Of Evidence
 
-- **Flutter SDK** — audited against `lib/src/*.dart`, `lib/pug_flutter_sdk.dart`, `proto/**`, and `test/pug_flutter_sdk_test.dart` at commit `51857f1`. Generated code under `lib/src/gen/` was excluded.
+- **Flutter SDK** — audited against `lib/src/*.dart`, `lib/pug_sdk.dart`, `proto/**`, and `test/pug_sdk_test.dart` at commit `51857f1`. Generated code under `lib/src/gen/` was excluded.
 - **Web SDK** — spot-checked against `../cotton-web-sdk/src/*.ts` at commit `9ebd5c2`, including `pug.ts`, `track.ts`, `well-known-events.ts`, `session.ts`, and `push.ts`.
 - **Shared backend contract** — both SDKs target `sdk.events.v1.EventsService/BatchCreate`, `sdk.profiles.v1.ProfilesSDKService/Identify`, and `sdk.devices.v1.DevicesService/Subscribe`, with `buf.validate` rules carried in `proto/**`.

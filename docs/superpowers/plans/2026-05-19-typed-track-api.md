@@ -161,7 +161,7 @@ Create `test/typed_track_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
+import 'package:pug_sdk/pug_sdk.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -233,7 +233,7 @@ This task replaces `Pug.track` (static method) with a `static final _TrackNamesp
 **Files:**
 - Create: `lib/src/track_namespace.dart` (hand-written for now; later this exact file is overwritten by codegen in Task 7)
 - Modify: `lib/src/pug.dart`
-- Modify: `lib/pug_flutter_sdk.dart` (barrel) — only if new symbols become public
+- Modify: `lib/pug_sdk.dart` (barrel) — only if new symbols become public
 - Test: `test/typed_track_test.dart`
 
 - [ ] **Step 1: Write the failing tear-off / call-equivalence tests**
@@ -242,7 +242,7 @@ Add to `test/typed_track_test.dart` (replace the file contents):
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
+import 'package:pug_sdk/pug_sdk.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -330,7 +330,7 @@ Replace it with:
 
 - [ ] **Step 5: Add `TrackNamespace` to the public barrel**
 
-Open `lib/pug_flutter_sdk.dart`. Locate the existing `export 'src/...';` lines. Add:
+Open `lib/pug_sdk.dart`. Locate the existing `export 'src/...';` lines. Add:
 
 ```dart
 export 'src/track_namespace.dart' show TrackNamespace;
@@ -353,7 +353,7 @@ Expected: all existing tests pass except any that depended on `Pug.track` being 
 - [ ] **Step 8: Commit**
 
 ```bash
-git -C /Users/holu/workspace/dart/pug-flutter-sdk add lib/src/track_namespace.dart lib/src/pug.dart lib/pug_flutter_sdk.dart test/typed_track_test.dart
+git -C /Users/holu/workspace/dart/pug-flutter-sdk add lib/src/track_namespace.dart lib/src/pug.dart lib/pug_sdk.dart test/typed_track_test.dart
 git -C /Users/holu/workspace/dart/pug-flutter-sdk commit -m "Wire Pug.track to TrackNamespace via call method
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -558,11 +558,11 @@ Append to `test/typed_track_test.dart` inside `void main()`:
   });
 ```
 
-If `CapturingLogger` and `FakeTransport` are not yet imported, copy their import lines from `test/pug_flutter_sdk_test.dart`:
+If `CapturingLogger` and `FakeTransport` are not yet imported, copy their import lines from `test/pug_sdk_test.dart`:
 
 ```dart
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
-import 'package:pug_flutter_sdk/src/connect_transport.dart';
+import 'package:pug_sdk/pug_sdk.dart';
+import 'package:pug_sdk/src/connect_transport.dart';
 // (plus whichever local helpers are defined in the existing test file)
 ```
 
@@ -1333,7 +1333,7 @@ Create `test/compile_fail/missing_required_field.dart`:
 
 ```dart
 // expect_error: missing_required_argument
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
+import 'package:pug_sdk/pug_sdk.dart';
 
 void main() {
   Pug.track.purchase(amount: 99.50, currency: 'USD');
@@ -1344,7 +1344,7 @@ Create `test/compile_fail/wrong_typed_value.dart`:
 
 ```dart
 // expect_error: argument_type_not_assignable
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
+import 'package:pug_sdk/pug_sdk.dart';
 
 void main() {
   Pug.track.purchase(productId: 'sku-1', amount: '99.50', currency: 'USD');

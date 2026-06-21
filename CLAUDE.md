@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 Pug Flutter SDK is a Flutter/Dart analytics, identity, session, batching, and push device registration SDK. It is intended to match the product semantics of `../cotton-web-sdk` while using Flutter-native lifecycle and storage APIs.
 
-The public barrel is `lib/pug_flutter_sdk.dart`. Core runtime logic lives under `lib/src/`; generated protobuf Dart code lives under `lib/src/gen/` and is produced from `proto/**/*.proto`.
+The public barrel is `lib/pug_sdk.dart`. Core runtime logic lives under `lib/src/`; generated protobuf Dart code lives under `lib/src/gen/` and is produced from `proto/**/*.proto`.
 
 Minimum supported SDKs are Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`. This floor is driven by the generated protobuf code and the `protobuf` runtime.
 
@@ -126,7 +126,7 @@ Anonymous profile IDs are prefixed with `anon-`. The first successful `identify(
 
 ### Push
 
-Push is provider-neutral at the API level through `PushProvider`. The FCM implementation is provided in a separate add-on package, `pug_flutter_fcm`. To use FCM, users must depend on both `pug_flutter_sdk` and `pug_flutter_fcm`, achieving full dependency-level optionality.
+Push is provider-neutral at the API level through `PushProvider`. The FCM implementation is provided in a separate add-on package, `pug_flutter_fcm`. To use FCM, users must depend on both `pug_sdk` and `pug_flutter_fcm`, achieving full dependency-level optionality.
 
 Notification helper events:
 

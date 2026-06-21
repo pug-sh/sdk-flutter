@@ -12,7 +12,7 @@ dependencies:
   firebase_messaging: ">=15.0.0 <17.0.0"
   flutter:
     sdk: flutter
-  pug_flutter_sdk:
+  pug_sdk:
     path: ../
 
 dev_dependencies:

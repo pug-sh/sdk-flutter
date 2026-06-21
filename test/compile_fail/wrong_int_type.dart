@@ -1,5 +1,5 @@
 // expect_error: argument_type_not_assignable
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
+import 'package:pug_sdk/pug_sdk.dart';
 
 void main() {
   // EXPECTED: analyzer error because `quantity` is `int?` but we pass a String.
