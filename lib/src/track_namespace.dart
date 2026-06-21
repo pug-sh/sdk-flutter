@@ -9,7 +9,7 @@ import 'package:meta/meta.dart';
 
 import 'configuration.dart';
 import 'contracts.dart';
-import 'events.dart';
+import 'well_known_event_schemas.dart';
 import 'well_known_events.dart';
 
 /// The subset of `Pug` that `TrackNamespace` depends on. `Pug` implements
