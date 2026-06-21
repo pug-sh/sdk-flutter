@@ -1,4 +1,4 @@
-# Feature Parity With `../cotton-web-sdk`
+# Feature Parity With `../sdk-web`
 
 ## Completed
 
@@ -42,14 +42,21 @@
   - Added `url` and `referrer` properties to `page_view` events.
   - Host apps must register `PugRouteObserver()` with their Navigator.
 
+- [x] Add tracking consent parity.
+  - `TrackingConsentConfig` (`defaultConsent`, `persist`) on `PugOptions`.
+  - Gates track/identify/auto-capture; `Pug.optInTracking`/`optOutTracking`/`getTrackingConsent`/`isTrackingEnabled`.
+  - Persists to `__pug_<projectId>_consent__` when `persist` is set.
+
+- [x] Fix default endpoint.
+  - Was `http://localhost:8080`; now `https://polru.pug.sh` to match the web SDK.
+
 ## Remaining Gaps
 
 - [x] Skip client-side protovalidate parity in Dart.
   - `protovalidate` does not currently support Dart, so Flutter will continue using best-effort property mapping and server-side rejection for invalid payloads.
 
-- [x] Accept well-known event catalog drift vs `../cotton-web-sdk`.
-  - Flutter will keep mirroring the broader 24-name catalog in `PugEventNames` and `wellKnownEventSchemas`.
-  - The current web SDK runtime schema map only includes 21 names; this mismatch is accepted for now.
+- [x] Accept well-known event catalog drift vs `../sdk-web`.
+  - Both catalogs are generated from the same buf source, platform-filtered: 115 shared, 4 web-only DOM events, 8 Flutter-only mobile-lifecycle events. The difference is intentional, not a coverage gap.
 
 - [x] Adopt full buf well-known event catalog and add typed track API.
   - Per-event typed methods on `Pug.track.*` codegen'd via `make typed-track`.

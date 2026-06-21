@@ -7,6 +7,7 @@ import 'contracts.dart';
 import 'runtime.dart';
 import 'shared_preferences_storage.dart';
 import 'track_namespace.dart';
+import 'tracking_consent.dart';
 
 class Pug implements TrackContext {
   Pug._();
@@ -66,6 +67,26 @@ class Pug implements TrackContext {
   static Future<void> flush() => _shared.flushClient();
 
   static void destroy() => _shared.destroyClient();
+
+  /// Grants tracking consent. When consent is denied, `track()`, the typed
+  /// `Pug.track.*` methods, `identify()`, and all automatic capture are
+  /// dropped; opting in re-enables them for subsequent calls. No-ops with a
+  /// warning if called before [init]. See [TrackingConsentConfig].
+  static void optInTracking() => _shared._optInTracking();
+
+  /// Denies tracking consent. Subsequent events and identifies are dropped
+  /// until [optInTracking] is called. No-ops with a warning if called before
+  /// [init].
+  static void optOutTracking() => _shared._optOutTracking();
+
+  /// Returns the current tracking-consent state, or [TrackingConsent.denied]
+  /// if called before [init].
+  static TrackingConsent getTrackingConsent() => _shared._getTrackingConsent();
+
+  /// Whether tracking is currently permitted. Reflects consent only — it is
+  /// independent of `dryRun`, which suppresses delivery without changing
+  /// consent. Returns `false` if called before [init].
+  static bool isTrackingEnabled() => _shared._isTrackingEnabled();
 
   Future<void> initialize(String projectId, PugOptions options) async {
     final logger = SafePugLogger(options.logger);
@@ -165,5 +186,57 @@ class Pug implements TrackContext {
     } finally {
       _client = null;
     }
+  }
+
+  void _optInTracking() {
+    final client = _client;
+    if (client == null) {
+      _fallbackLogger.warn(
+        'Pug.optInTracking() called before init(); ignoring.',
+      );
+      return;
+    }
+    try {
+      client.optInTracking();
+    } catch (error, stackTrace) {
+      _fallbackLogger.error('Pug optInTracking failed.', error, stackTrace);
+    }
+  }
+
+  void _optOutTracking() {
+    final client = _client;
+    if (client == null) {
+      _fallbackLogger.warn(
+        'Pug.optOutTracking() called before init(); ignoring.',
+      );
+      return;
+    }
+    try {
+      client.optOutTracking();
+    } catch (error, stackTrace) {
+      _fallbackLogger.error('Pug optOutTracking failed.', error, stackTrace);
+    }
+  }
+
+  TrackingConsent _getTrackingConsent() {
+    final client = _client;
+    if (client == null) {
+      _fallbackLogger.warn(
+        'Pug.getTrackingConsent() called before init(); returning denied.',
+      );
+      return TrackingConsent.denied;
+    }
+    return client.trackingConsent;
+  }
+
+  bool _isTrackingEnabled() {
+    final client = _client;
+    if (client == null) {
+      _fallbackLogger.warn(
+        'Pug.isTrackingEnabled() called before init(); returning false.',
+      );
+      return false;
+    }
+    return client.isTrackingEnabled;
   }
 }
