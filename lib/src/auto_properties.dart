@@ -70,6 +70,8 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     return {
       r'$platform': defaultTargetPlatform.name,
       r'$os': Platform.operatingSystem,
+      // Fallback for desktop/web/failure; overridden below by the preloaded
+      // device-info value ($osVersion in _staticProperties) when available.
       r'$osVersion': Platform.operatingSystemVersion,
       r'$locale': PlatformDispatcher.instance.locale.toLanguageTag(),
       r'$timezone': DateTime.now().timeZoneName,
@@ -87,6 +89,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     if (Platform.isAndroid) {
       final info = await plugin.androidInfo;
       return {
+        r'$osVersion': info.version.release,
         r'$deviceManufacturer': _readString(info, 'manufacturer'),
         r'$deviceModel': _readString(info, 'model'),
         r'$deviceName': _readString(info, 'name'),
@@ -96,6 +99,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       final info = await plugin.iosInfo;
       final modelName = _readString(info, 'modelName');
       return {
+        r'$osVersion': info.systemVersion,
         r'$deviceManufacturer': 'Apple',
         r'$deviceModel':
             modelName.isNotEmpty ? modelName : _readString(info, 'model'),
