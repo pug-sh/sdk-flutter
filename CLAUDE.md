@@ -114,7 +114,7 @@ Property mapping:
 - `null` is dropped silently.
 - unsupported or non-finite values are dropped with a warning.
 
-Well-known event schemas are generated from `proto/common/v1/well_known_events.proto` and mirrored by the `wellKnownEventSchemas` registry in `lib/src/events.dart`, which is used only to detect well-known kinds (for the typed-track hint) — `mapEventProperties` itself maps loosely by Dart value type. Correct int-vs-double wire types for known fields come from the typed `Pug.track.*` parameter types at compile time (e.g. a `double` param serializes an integer-valued argument as `doubleValue`); the untyped `track()` path and `extras` use loose runtime mapping.
+Well-known event schemas are generated from the `proto/common/events/v1/*_events.proto` files and emitted as the `wellKnownEventSchemas` registry in `lib/src/well_known_event_schemas.dart` (re-exported from the barrel; the hand-written models stay in `lib/src/events.dart`). The registry is used only to detect well-known kinds (for the typed-track hint) — `mapEventProperties` itself maps loosely by Dart value type. Correct int-vs-double wire types for known fields come from the typed `Pug.track.*` parameter types at compile time (e.g. a `double` param serializes an integer-valued argument as `doubleValue`); the untyped `track()` path and `extras` use loose runtime mapping.
 
 `PugEventNames` in `lib/src/well_known_events.dart` exposes public constants for all well-known event names.
 

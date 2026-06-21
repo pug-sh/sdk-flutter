@@ -202,20 +202,3 @@ class FakePushProvider implements PushProvider {
   @override
   Map<Object?, Object?> notificationData(Object source) => const {};
 }
-
-class TestRoute extends Route<dynamic> {
-  TestRoute({required this.name});
-
-  final String name;
-
-  @override
-  RouteSettings get settings => RouteSettings(name: name);
-
-  @override
-  List<OverlayEntry> get overlayEntries => [];
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-}
