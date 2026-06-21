@@ -34,7 +34,7 @@ The goal is product-semantic parity where it makes sense for mobile. Browser-onl
 | Frustration signals         | `rage_click`, `dead_click`                                  | Not automatic                                                                | Intentionally omitted       |
 | Push subscription           | Optional web-push/VAPID module                              | Provider-neutral push API                                                    | Mobile equivalent           |
 | Notification click tracking | Service worker + page helper                                | Explicit mobile notification helper hooks (received/clicked/dismissed)       | Mobile equivalent (+ more)  |
-| Package optionality         | Push is tree-shakeable and optional                         | Core package is provider-neutral; FCM lives in separate package              | Complete                    |
+| Package optionality         | Push is tree-shakeable and optional                         | Core package is provider-neutral; no provider bundled                        | Complete                    |
 
 ## Public API
 
@@ -240,7 +240,7 @@ The Flutter SDK exposes provider-neutral APIs:
 - `PugPush.trackNotificationReceived(data)`
 - `PugPush.trackNotificationDismissed(data)`
 
-The core package is provider-neutral. FCM support now lives in the separate `pug_flutter_fcm` package.
+The core package is provider-neutral and bundles no concrete provider. An FCM (or other) provider will be packaged as a separate add-on when notifications are introduced.
 
 **Parity status:** Mobile equivalent, and ahead in helper surface area.
 
@@ -300,7 +300,7 @@ Severity: **High** = analytics correctness/coverage, **Medium** = behavior or DX
 | 4 | Compile-time typed event props | `WellKnownEventPropsMap` + overloaded `TrackFn` | Constants only; no compile-time prop typing | Low |
 | 5 | DOM interaction auto-trackers | Installed by `autoTrack` | Schemas exist, no trackers | Low |
 | 6 | Hard delivery guarantee on app kill | `navigator.sendBeacon` on `pagehide` | Best-effort `flushAll()` only | Low |
-| 7 | Package-level FCM optionality | Push is tree-shakeable and optional | FCM moved to `pug_flutter_fcm` | Closed (Low-Medium) |
+| 7 | Package-level FCM optionality | Push is tree-shakeable and optional | Provider-neutral push API; no provider bundled | Closed (Low-Medium) |
 ## Compatibility Notes
 
 The Flutter SDK currently supports:

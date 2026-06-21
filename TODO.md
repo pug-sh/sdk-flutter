@@ -31,7 +31,7 @@
 
 - [x] Revisit push packaging.
   - Web keeps push optional for bundle size.
-  - Package-level optionality is now achieved by moving FCM support to the separate `pug_flutter_fcm` package.
+  - Package-level optionality is achieved by a provider-neutral push API; no concrete provider is bundled. An FCM add-on can be packaged separately when notifications are introduced.
 
 - [x] Add docs/tests for each parity feature as it lands.
   - Keep tests focused on behavior shared with the web SDK and mobile-specific expectations from `mobile-sdk-ai-spec.md`.
