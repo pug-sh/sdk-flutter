@@ -405,23 +405,42 @@ class PugClient with WidgetsBindingObserver {
 
   Future<void> destroy() async {
     _flushTimer?.cancel();
-    // Await the best-effort final flush before tearing down so queued events get
-    // a real send attempt instead of racing the storage purge below.
-    await flushAll();
-    _queue.dispose();
-    unawaited(_linkSubscription?.cancel());
-    _linkProvider?.dispose();
-    _lifecycleBinding?.removeObserver(this);
-    PugRouteObserver.onRouteChanged = null;
-    _storage.remove(_sessionKey);
-    _storage.remove(_profileKey);
-    _storage.remove(_deviceKey);
-    _storage.remove(_externalIdKey);
-    _storage.remove(_campaignKey);
-    _storage.remove(_queueKey);
-    _currentRoute = null;
-    _previousRoute = null;
-    _disposed = true;
+    try {
+      // Best-effort final flush so queued events get a real send attempt before
+      // the storage purge below, rather than racing it.
+      await flushAll();
+    } catch (error, stackTrace) {
+      _options.logger.error(
+        'Pug final flush during destroy failed.',
+        error,
+        stackTrace,
+      );
+    } finally {
+      // Teardown must run even if the flush above throws, or the client would
+      // leak its lifecycle observer, link subscription, and timers. Cancel the
+      // timer again in case the final flush rescheduled one on a transient
+      // failure.
+      _flushTimer?.cancel();
+      _queue.dispose();
+      unawaited(_linkSubscription?.cancel());
+      _linkProvider?.dispose();
+      _lifecycleBinding?.removeObserver(this);
+      // Only clear the shared route hook if it still points at this client; a
+      // follow-up init() may have already rebound it to a new client, since
+      // destroy() detaches the singleton synchronously and need not be awaited.
+      if (PugRouteObserver.onRouteChanged == notifyRouteChanged) {
+        PugRouteObserver.onRouteChanged = null;
+      }
+      _storage.remove(_sessionKey);
+      _storage.remove(_profileKey);
+      _storage.remove(_deviceKey);
+      _storage.remove(_externalIdKey);
+      _storage.remove(_campaignKey);
+      _storage.remove(_queueKey);
+      _currentRoute = null;
+      _previousRoute = null;
+      _disposed = true;
+    }
   }
 
   Future<void> _sendImmediateOrQueue(Event event) async {

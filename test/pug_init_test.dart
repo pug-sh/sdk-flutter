@@ -147,6 +147,29 @@ void main() {
     expect(storage.getString('__pug_project_queue__'), isNull);
   });
 
+  test('destroy still purges storage when the final flush fails', () async {
+    final transport =
+        FakeTransport()
+          ..batchError = const PugTransportException(
+            'offline',
+            permanent: false,
+          );
+    final storage = MemoryPugStorage();
+    final client = testClient(transport: transport, storage: storage);
+
+    client.track('test_event');
+    await client.identify('test-user');
+    await Future<void>.delayed(Duration.zero);
+    expect(storage.getString('__pug_project_session__'), isNotNull);
+
+    // The destroy-time flush fails transiently; teardown must still complete.
+    await client.destroy();
+
+    expect(storage.getString('__pug_project_session__'), isNull);
+    expect(storage.getString('__pug_project_profile__'), isNull);
+    expect(storage.getString('__pug_project_queue__'), isNull);
+  });
+
   test('Pug.init binds the route observer callback', () async {
     PugRouteObserver.onRouteChanged = null;
     await Pug.init(
@@ -170,6 +193,21 @@ void main() {
     await client.destroy();
 
     expect(PugRouteObserver.onRouteChanged, isNull);
+  });
+
+  test('destroy does not clear a route hook rebound to another client', () async {
+    final clientA = testClient();
+    final clientB = testClient();
+    // Simulate a follow-up init() having rebound the shared hook to client B
+    // while client A's (un-awaited) destroy is still in flight.
+    PugRouteObserver.onRouteChanged = clientB.notifyRouteChanged;
+    addTearDown(() => PugRouteObserver.onRouteChanged = null);
+
+    await clientA.destroy();
+
+    // A's teardown must leave B's binding intact, else auto page-views silently
+    // die after a destroy()/init() cycle.
+    expect(PugRouteObserver.onRouteChanged, equals(clientB.notifyRouteChanged));
   });
 
   test(
@@ -215,7 +253,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final preferences = await SharedPreferences.getInstance();
     final logger = CapturingLogger();
-    final storage = SharedPreferencesPugStorage(
+    final storage = SharedPreferencesPugStorage.withSeams(
       preferences,
       logger: logger,
       writeString: (_, _) => Future<bool>.error(StateError('disk full')),

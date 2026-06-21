@@ -198,4 +198,9 @@ void main() {
     final mapped = mapConnectError(Exception('offline'), StackTrace.empty);
     expect(mapped.isPermanent, isFalse);
   });
+
+  test('connect transport maps Dart Errors (encode bugs) as permanent', () {
+    final mapped = mapConnectError(StateError('bad encode'), StackTrace.empty);
+    expect(mapped.isPermanent, isTrue);
+  });
 }

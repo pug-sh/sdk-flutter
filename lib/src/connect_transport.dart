@@ -113,12 +113,15 @@ PugTransportException _mapError(Object error, StackTrace stackTrace) {
       stackTrace: stackTrace,
     );
   }
-  // Unknown/unwrapped errors (SocketException, TimeoutException, TLS, etc.) are
-  // almost always transient connectivity problems. Default them to transient so
-  // the batch is rolled back and retried rather than permanently dropped.
+  // Connect wraps most failures in ConnectException (handled above); anything
+  // else is unwrapped. Treat Dart `Error`s (programming bugs such as a failed
+  // protobuf encode — TypeError/StateError/ArgumentError) as permanent so a
+  // poison batch is dropped instead of retried forever. Everything else
+  // (SocketException, TimeoutException, TLS, etc.) is a transient connectivity
+  // problem: roll back and retry rather than drop.
   return PugTransportException(
     error.toString(),
-    permanent: false,
+    permanent: error is Error,
     stackTrace: stackTrace,
   );
 }

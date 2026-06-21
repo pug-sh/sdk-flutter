@@ -29,7 +29,7 @@ Future<List<Map<String, Object?>>> _captureRequests(void Function() act) async {
   await Pug.destroy();
   await Future<void>.delayed(
     Duration.zero,
-  ); // drain microtasks from destroy's unawaited flushAll
+  ); // let destroy()'s fire-and-forget teardown settle
   return events.map((e) => e.toJson()).toList();
 }
 
@@ -446,7 +446,7 @@ void main() {
       await Pug.destroy();
       await Future<void>.delayed(
         Duration.zero,
-      ); // drain microtasks from destroy's unawaited flushAll
+      ); // let destroy()'s fire-and-forget teardown settle
     });
 
     for (final kind in PugEventNames.all) {
@@ -500,12 +500,12 @@ void main() {
       await Pug.destroy();
       await Future<void>.delayed(
         Duration.zero,
-      ); // drain microtasks from destroy's unawaited flushAll
+      ); // let destroy()'s fire-and-forget teardown settle
     });
 
     // NOTE: These spot checks compare the Dart-model `Event.toJson()` output
     // (post merge, pre protobuf encode). They do NOT exercise PugProtoCodec or
-    // HttpPugTransport. A bug in proto encoding that only manifests on typed
+    // ConnectPugTransport. A bug in proto encoding that only manifests on typed
     // calls would not be caught here — that's intentionally the protobuf
     // wire-format layer's responsibility, validated separately at integration
     // test boundaries.

@@ -1,18 +1,25 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'contracts.dart';
 
 class SharedPreferencesPugStorage implements PugStorage {
-  SharedPreferencesPugStorage(
+  SharedPreferencesPugStorage(this.preferences, {this.logger})
+    : _writeString = preferences.setString,
+      _removeKey = preferences.remove;
+
+  /// Test seam: inject fake write/remove futures to exercise the async-failure
+  /// handling without a real platform channel.
+  @visibleForTesting
+  SharedPreferencesPugStorage.withSeams(
     this.preferences, {
     this.logger,
-    // Seams for testing the async-failure handling; default to the real plugin.
-    Future<bool> Function(String key, String value)? writeString,
-    Future<bool> Function(String key)? removeKey,
-  }) : _writeString = writeString ?? preferences.setString,
-       _removeKey = removeKey ?? preferences.remove;
+    required Future<bool> Function(String key, String value) writeString,
+    required Future<bool> Function(String key) removeKey,
+  }) : _writeString = writeString,
+       _removeKey = removeKey;
 
   static Future<SharedPreferencesPugStorage> create({PugLogger? logger}) async {
     final preferences = await SharedPreferences.getInstance();
@@ -29,11 +36,13 @@ class SharedPreferencesPugStorage implements PugStorage {
 
   @override
   void remove(String key) {
-    // Writes are async; attach a handler so a rejected future is observed and
-    // logged instead of becoming an unhandled error or a silent no-op.
+    // The plugin call is async; attach a handler so a rejected future is
+    // observed and logged instead of becoming an unhandled error or a silent
+    // no-op. Log only the key (never the value) plus the error for diagnosis.
     unawaited(
       _removeKey(key).catchError((Object error) {
         logger?.warn('Pug could not remove "$key" from persistent storage.');
+        logger?.debug(error.toString());
         return false;
       }),
     );
@@ -44,6 +53,7 @@ class SharedPreferencesPugStorage implements PugStorage {
     unawaited(
       _writeString(key, value).catchError((Object error) {
         logger?.warn('Pug could not persist "$key" to persistent storage.');
+        logger?.debug(error.toString());
         return false;
       }),
     );
