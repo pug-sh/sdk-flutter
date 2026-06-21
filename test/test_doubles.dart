@@ -1,4 +1,4 @@
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
+import 'package:pug_sdk/pug_sdk.dart';
 
 class CapturingLogger implements PugLogger {
   final List<String> warnings = <String>[];

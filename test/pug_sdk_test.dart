@@ -4,9 +4,9 @@ import 'dart:convert';
 import 'package:connectrpc/connect.dart' as connect;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
-import 'package:pug_flutter_sdk/src/connect_transport.dart';
-import 'package:pug_flutter_sdk/src/event_queue_storage.dart';
+import 'package:pug_sdk/pug_sdk.dart';
+import 'package:pug_sdk/src/connect_transport.dart';
+import 'package:pug_sdk/src/event_queue_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_doubles.dart';

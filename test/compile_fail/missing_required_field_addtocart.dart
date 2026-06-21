@@ -1,5 +1,5 @@
 // expect_error: missing_required_argument
-import 'package:pug_flutter_sdk/pug_flutter_sdk.dart';
+import 'package:pug_sdk/pug_sdk.dart';
 
 void main() {
   // EXPECTED: analyzer error because `productId` is required.
