@@ -47,7 +47,7 @@ void main() {
         contains('Pug.init() called after initialization; ignoring.'),
       );
 
-      Pug.destroy();
+      await Pug.destroy();
     },
   );
 
@@ -67,7 +67,7 @@ void main() {
 
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getString('__pug_project_queue__'), contains('signup'));
-    Pug.destroy();
+    await Pug.destroy();
   });
 
   test('track never throws and maps properties', () {
@@ -138,7 +138,7 @@ void main() {
       autoCaptureCampaigns: false,
     );
     await expectLater(client.identify(''), throwsA(isA<ArgumentError>()));
-    Pug.destroy();
+    await Pug.destroy();
     await expectLater(Pug.identify('user-before-init'), completes);
     expect(
       () => client.track('purchase', props: {'bad': double.nan}),
@@ -538,8 +538,7 @@ void main() {
     final client = testClient(transport: transport);
 
     client.track('one');
-    client.destroy();
-    await Future<void>.delayed(Duration.zero);
+    await client.destroy();
 
     expect(transport.batches.single.map((event) => event.kind), ['one']);
     expect(client.queue.peekUnlocked(), isEmpty);
@@ -623,7 +622,7 @@ void main() {
     expect(storage.getString('__pug_project_queue__'), isNotNull);
 
     // Destroy the client
-    client.destroy();
+    await client.destroy();
 
     // Verify all storage keys are removed
     expect(storage.getString('__pug_project_session__'), isNull);
@@ -632,6 +631,129 @@ void main() {
     expect(storage.getString('__pug_project_external_id__'), isNull);
     expect(storage.getString('__pug_project_queue__'), isNull);
   });
+
+  test('Pug.init binds the route observer callback', () async {
+    PugRouteObserver.onRouteChanged = null;
+    await Pug.init(
+      'project',
+      PugOptions(
+        apiKey: 'key',
+        transport: FakeTransport(),
+        storage: MemoryPugStorage(),
+        autoTrack: false,
+      ),
+    );
+
+    expect(PugRouteObserver.onRouteChanged, isNotNull);
+    await Pug.destroy();
+  });
+
+  test('route observer emits page_view events through the wired client', () {
+    final client = testClient(autoPageViews: true);
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    addTearDown(() => PugRouteObserver.onRouteChanged = null);
+
+    final observer = PugRouteObserver();
+    observer.didPush(_NamedRoute('/home'), _NamedRoute('/'));
+    observer.didPush(_NamedRoute('/profile'), _NamedRoute('/home'));
+
+    final events = client.queue.peekUnlocked();
+    expect(events.map((event) => event.kind), everyElement('page_view'));
+    expect(events.last.customProperties['url']?.value, '/profile');
+    expect(events.last.customProperties['referrer']?.value, '/home');
+  });
+
+  test('connect transport maps unknown (non-Connect) errors as transient', () {
+    final mapped = mapConnectError(Exception('offline'), StackTrace.empty);
+    expect(mapped.isPermanent, isFalse);
+  });
+
+  test('notification received and dismissed are sent immediately', () async {
+    final transport = FakeTransport();
+    final client = testClient(transport: transport);
+
+    client.trackNotificationReceived({'campaignId': 'c1'});
+    client.trackNotificationDismissed({'campaignId': 'c1'});
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      transport.sent.map((event) => event.kind),
+      containsAll(['notification_received', 'notification_dismissed']),
+    );
+    expect(client.queue.peekUnlocked(), isEmpty);
+  });
+
+  test('destroy clears the route observer callback', () async {
+    final client = testClient();
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+
+    await client.destroy();
+
+    expect(PugRouteObserver.onRouteChanged, isNull);
+  });
+
+  test(
+    'destroy detaches the singleton synchronously for immediate re-init',
+    () async {
+      await Pug.init(
+        'project',
+        PugOptions(
+          apiKey: 'key',
+          transport: FakeTransport(),
+          storage: MemoryPugStorage(),
+          autoTrack: false,
+        ),
+      );
+
+      // Intentionally not awaited — the singleton must detach synchronously so a
+      // follow-up init() is not rejected as "already initialized".
+      final pendingDestroy = Pug.destroy();
+
+      final logger = CapturingLogger();
+      await Pug.init(
+        'project',
+        PugOptions(
+          apiKey: 'key',
+          logger: logger,
+          transport: FakeTransport(),
+          storage: MemoryPugStorage(),
+          autoTrack: false,
+        ),
+      );
+
+      expect(
+        logger.warnings,
+        isNot(contains('Pug.init() called after initialization; ignoring.')),
+      );
+
+      await pendingDestroy;
+      await Pug.destroy();
+    },
+  );
+
+  test('shared preferences storage logs when an async write fails', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final logger = CapturingLogger();
+    final storage = SharedPreferencesPugStorage(
+      preferences,
+      logger: logger,
+      writeString: (_, _) => Future<bool>.error(StateError('disk full')),
+      removeKey: (_) => Future<bool>.error(StateError('disk full')),
+    );
+
+    storage.setString('k', 'v');
+    storage.remove('k');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(logger.warnings, hasLength(2));
+    expect(logger.warnings.any((m) => m.contains('persist')), isTrue);
+    expect(logger.warnings.any((m) => m.contains('remove')), isTrue);
+  });
+}
+
+class _NamedRoute extends Route<void> {
+  _NamedRoute(String name) : super(settings: RouteSettings(name: name));
 }
 
 PugClient testClient({

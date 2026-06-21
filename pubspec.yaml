@@ -1,5 +1,5 @@
 name: pug_sdk
-description: "A new Flutter package project."
+description: "Pug analytics, identity, session, batching, and push device-registration SDK for Flutter."
 version: 0.0.1
 homepage:
 

@@ -43,7 +43,7 @@ make check        # protos + format + analyze + test
 
 `PugClient` in `lib/src/runtime.dart` owns transport, queue, storage, session/profile state, sampling, flush scheduling, and Flutter lifecycle observation. `track()` builds an `Event`, queues or sends it immediately, and catches all failures.
 
-Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle changes emit `app_open` and `app_close`. When `autoPageViews` is enabled (default), route changes emit `page_view` events with `url` and `referrer` properties; host apps must register `Pug.routeObserver` with their Navigator to enable this feature.
+Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle changes emit `app_open` and `app_close`. When `autoPageViews` is enabled (default), route changes emit `page_view` events with `url` and `referrer` properties; host apps must add `PugRouteObserver()` to their Navigator's `navigatorObservers` to enable this feature. `Pug.init(...)` binds `PugRouteObserver.onRouteChanged` to the active client.
 
 Campaign capture is enabled by default through `PugOptions.autoCaptureCampaigns`. On start, `PugClient` reads the initial app/deep link and listens for later links through `PugLinkProvider`/`AppLinksPugLinkProvider`; host apps must still configure Android App Links, iOS Universal Links, or custom URL schemes.
 
@@ -77,7 +77,7 @@ Do not change this behavior casually; it prevents duplicate locks and avoids dro
 
 ### Transport
 
-`HttpPugTransport` sends binary protobuf payloads over Connect-compatible HTTP endpoints with `x-api-key` and `connect-protocol-version: 1`.
+`ConnectPugTransport` (in `lib/src/connect_transport.dart`) sends binary protobuf payloads over Connect-compatible HTTP endpoints. It sets `x-api-key`; the `connectrpc` client adds `connect-protocol-version: 1`. Unknown/unwrapped transport errors (e.g. `SocketException`) are treated as transient so the batch is retried, not dropped.
 
 RPC paths:
 
@@ -91,7 +91,7 @@ Permanent HTTP failures drop events; transient failures roll back and retry late
 
 `PugAutoPropertyProvider` supplies auto-properties synchronously during event creation. `SystemPugAutoPropertyProvider.create(...)` preloads async platform metadata for `Pug.init(...)` unless callers supply one.
 
-Auto properties include `$projectId`, `$sdkVersion`, `$platform`, `$os`, `$osVersion`, `$locale`, `$timezone`, screen dimensions, app version/build/package where available, device manufacturer/model where available, and connectivity radio type where available.
+Auto properties include `$projectId`, `$sdkVersion`, `$platform`, `$os`, `$osVersion`, `$locale`, `$timezone`, screen dimensions, app version/build/package where available, device manufacturer/model where available, and a coarse connectivity category (`$networkType`: `wifi`, `mobile`, `ethernet`, `vpn`, `bluetooth`, `other`, `none`, or `unknown`) where available.
 
 Campaign auto-properties are merged from the latest captured app/deep link: `$utmSource`, `$utmMedium`, `$utmCampaign`, `$utmTerm`, `$utmContent`, `$gclid`, `$fbclid`, `$msclkid`, and `$ttclid`. They are stored under the project-scoped campaign key and attached to later events.
 
@@ -114,7 +114,7 @@ Property mapping:
 - `null` is dropped silently.
 - unsupported or non-finite values are dropped with a warning.
 
-Well-known event schemas are generated from `proto/common/v1/well_known_events.proto` and mirrored by the runtime registry in `lib/src/events.dart`. Known fields are schema-aware, so integer-valued double fields still serialize as `doubleValue`; extra properties remain accepted through loose mapping.
+Well-known event schemas are generated from `proto/common/v1/well_known_events.proto` and mirrored by the `wellKnownEventSchemas` registry in `lib/src/events.dart`, which is used only to detect well-known kinds (for the typed-track hint) — `mapEventProperties` itself maps loosely by Dart value type. Correct int-vs-double wire types for known fields come from the typed `Pug.track.*` parameter types at compile time (e.g. a `double` param serializes an integer-valued argument as `doubleValue`); the untyped `track()` path and `extras` use loose runtime mapping.
 
 `PugEventNames` in `lib/src/well_known_events.dart` exposes public constants for all well-known event names.
 
@@ -126,7 +126,7 @@ Anonymous profile IDs are prefixed with `anon-`. The first successful `identify(
 
 ### Push
 
-Push is provider-neutral at the API level through `PushProvider`. No concrete provider ships with the SDK; host apps supply their own `PushProvider` implementation. An FCM provider can be added as a separate add-on package when notifications are introduced.
+Push is provider-neutral at the API level through `PushProvider`. No concrete provider ships with the SDK; host apps supply their own `PushProvider` implementation. The notification received/clicked/dismissed tracking helpers on `PugPush` are implemented today; an FCM (or other) provider may be packaged as a separate add-on. All three notification helpers send immediately, since notification callbacks often fire while the app is backgrounded.
 
 Notification helper events:
 
@@ -138,11 +138,11 @@ Notification payload sanitization keeps only flat strings, booleans, finite numb
 
 ## Design Invariants
 
-- Public SDK APIs must never throw or crash the host app.
-- `init()`, `identify()`, and push registration log failures and complete normally.
+- `track()` (typed and untyped), `reset()`, `rotate()`, `flush()`, `destroy()`, and the `PugPush` helpers are best-effort: they catch failures, log, and never throw or crash the host app.
+- `init()` and `identify()` are the exceptions: they throw on invalid input, and re-throw init/transport failures after logging, so callers can await and handle them. Push registration logs failures and completes normally.
 - Repeated init warns and no-ops.
 - Background lifecycle transitions should flush queued events even when `autoTrack` is disabled.
-- `destroy()` starts a best-effort final flush before disposing local runtime resources.
+- `destroy()` is async and awaits a best-effort final flush before disposing local runtime resources; the detached singleton resets synchronously so a follow-up `init()` works even if the caller does not await.
 - Keep generated protobuf code generated; update `.proto` files and run `make protos`.
 - Do not log API keys, push tokens, or full request payloads by default.
 - Prefer small injectable interfaces over hard-coded platform dependencies.
@@ -157,7 +157,7 @@ Implemented parity:
 - Persistent queue semantics with lock/commit/rollback.
 - Session expiry, rotation, reset, and profile distinct ID behavior.
 - `identify()` first-call anonymous merge behavior and device ID linking.
-- Well-known event names and schema-aware property mapping.
+- Well-known event names, typed track methods, and type-based property mapping.
 - Provider-neutral push registration model.
 - Notification received/clicked/dismissed helpers.
 - Fuller mobile auto-properties through `PugAutoPropertyProvider`.
@@ -175,7 +175,7 @@ Flutter/mobile-specific parity:
 
 Remaining gaps:
 
-- No concrete push provider ships with the SDK. The push API is provider-neutral; an FCM (or other) provider will be packaged as a separate add-on when notifications are introduced.
+- No concrete push provider ships with the SDK. The push API is provider-neutral and the notification tracking helpers are implemented; an FCM (or other) token provider can be packaged as a separate add-on.
 - No browser-style auto trackers for click, scroll, forms, rage click, dead click, page URL/referrer/title, or UA client hints. UTM-style campaign capture is implemented from app/deep links, but this SDK does not capture install referrer/deferred attribution automatically.
 
 Keep `TODO.md` synchronized when closing or adding parity items.

@@ -65,7 +65,7 @@ class Pug implements TrackContext {
 
   static Future<void> flush() => _shared.flushClient();
 
-  static void destroy() => _shared.destroyClient();
+  static Future<void> destroy() => _shared.destroyClient();
 
   Future<void> initialize(String projectId, PugOptions options) async {
     final logger = SafePugLogger(options.logger);
@@ -82,7 +82,9 @@ class Pug implements TrackContext {
     try {
       final resolvedOptions = options.copyWith(
         logger: logger,
-        storage: options.storage ?? await SharedPreferencesPugStorage.create(),
+        storage:
+            options.storage ??
+            await SharedPreferencesPugStorage.create(logger: logger),
         autoPropertyProvider:
             options.autoPropertyProvider ??
             await SystemPugAutoPropertyProvider.create(logger: logger),
@@ -92,7 +94,7 @@ class Pug implements TrackContext {
         options: resolvedOptions,
         lifecycleBinding: WidgetsBinding.instance,
       );
-      PugClient.onRouteChanged = client.notifyRouteChanged;
+      PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
       await client.start();
       if (client.isStarted) {
         _client = client;
@@ -157,13 +159,15 @@ class Pug implements TrackContext {
     }
   }
 
-  void destroyClient() {
+  Future<void> destroyClient() async {
+    // Detach the singleton synchronously so a follow-up init() works even if the
+    // caller does not await the (now async) final flush.
+    final client = _client;
+    _client = null;
     try {
-      _client?.destroy();
+      await client?.destroy();
     } catch (error, stackTrace) {
       _fallbackLogger.error('Pug destroy failed.', error, stackTrace);
-    } finally {
-      _client = null;
     }
   }
 }

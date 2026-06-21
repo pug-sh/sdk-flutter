@@ -26,7 +26,7 @@ Future<List<Map<String, Object?>>> _captureRequests(void Function() act) async {
   act();
   await Pug.flush();
   final events = transport.batches.expand((batch) => batch).toList();
-  Pug.destroy();
+  await Pug.destroy();
   await Future<void>.delayed(
     Duration.zero,
   ); // drain microtasks from destroy's unawaited flushAll
@@ -157,7 +157,7 @@ void main() {
         // And nothing in the WARN message should reference snake_case.
         expect(warnings.first, isNot(contains('add_to_cart')));
 
-        Pug.destroy();
+        await Pug.destroy();
       },
     );
 
@@ -205,7 +205,7 @@ void main() {
         isNotEmpty,
       );
 
-      Pug.destroy();
+      await Pug.destroy();
     });
   });
 
@@ -240,7 +240,7 @@ void main() {
                 .toList();
         expect(hints, hasLength(1));
 
-        Pug.destroy();
+        await Pug.destroy();
       },
     );
 
@@ -264,7 +264,7 @@ void main() {
           logger.debugs.where((m) => m.contains('consider Pug.track')).toList();
       expect(hints, isEmpty);
 
-      Pug.destroy();
+      await Pug.destroy();
     });
 
     test('distinct well-known kinds each get their own hint', () async {
@@ -295,7 +295,7 @@ void main() {
         reason: 'add_to_cart kind should hint Pug.track.addToCart (camelCase)',
       );
 
-      Pug.destroy();
+      await Pug.destroy();
     });
 
     test(
@@ -335,7 +335,7 @@ void main() {
           );
         }
 
-        Pug.destroy();
+        await Pug.destroy();
       },
     );
 
@@ -402,7 +402,7 @@ void main() {
         // The set of hint method names should be the same size as the kind set.
         expect(hintMethodNames, hasLength(PugEventNames.all.length));
 
-        Pug.destroy();
+        await Pug.destroy();
       },
     );
   });
@@ -430,7 +430,7 @@ void main() {
       );
       Pug.shared.logger.warn('hello');
       expect(logger.warnings.where((m) => m == 'hello'), isNotEmpty);
-      Pug.destroy();
+      await Pug.destroy();
     });
   });
 
@@ -443,7 +443,7 @@ void main() {
     // doesn't pollute these tests.
     setUp(TrackNamespace.resetHintedKindsForTest);
     tearDown(() async {
-      Pug.destroy();
+      await Pug.destroy();
       await Future<void>.delayed(
         Duration.zero,
       ); // drain microtasks from destroy's unawaited flushAll
@@ -497,7 +497,7 @@ void main() {
     // untyped calls in this group and interfere with other tests.
     setUp(TrackNamespace.resetHintedKindsForTest);
     tearDown(() async {
-      Pug.destroy();
+      await Pug.destroy();
       await Future<void>.delayed(
         Duration.zero,
       ); // drain microtasks from destroy's unawaited flushAll

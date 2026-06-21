@@ -90,8 +90,6 @@ class PugClient with WidgetsBindingObserver {
     );
   }
 
-  static void Function(String?, String?)? onRouteChanged;
-
   void notifyRouteChanged(String? url, String? referrer) {
     if (!_options.autoPageViews || _disposed) {
       return;
@@ -368,11 +366,21 @@ class PugClient with WidgetsBindingObserver {
   }
 
   void trackNotificationReceived(Map<Object?, Object?> data) {
-    track('notification_received', props: sanitizeNotificationData(data));
+    // Notification callbacks often fire while backgrounded; send immediately so
+    // the event is not stranded in the queue if the OS suspends the process.
+    track(
+      'notification_received',
+      props: sanitizeNotificationData(data),
+      options: const TrackOptions(immediate: true),
+    );
   }
 
   void trackNotificationDismissed(Map<Object?, Object?> data) {
-    track('notification_dismissed', props: sanitizeNotificationData(data));
+    track(
+      'notification_dismissed',
+      props: sanitizeNotificationData(data),
+      options: const TrackOptions(immediate: true),
+    );
   }
 
   @override
@@ -395,13 +403,16 @@ class PugClient with WidgetsBindingObserver {
     }
   }
 
-  void destroy() {
+  Future<void> destroy() async {
     _flushTimer?.cancel();
-    unawaited(flushAll());
+    // Await the best-effort final flush before tearing down so queued events get
+    // a real send attempt instead of racing the storage purge below.
+    await flushAll();
     _queue.dispose();
     unawaited(_linkSubscription?.cancel());
     _linkProvider?.dispose();
     _lifecycleBinding?.removeObserver(this);
+    PugRouteObserver.onRouteChanged = null;
     _storage.remove(_sessionKey);
     _storage.remove(_profileKey);
     _storage.remove(_deviceKey);
