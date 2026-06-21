@@ -113,9 +113,12 @@ PugTransportException _mapError(Object error, StackTrace stackTrace) {
       stackTrace: stackTrace,
     );
   }
+  // Unknown/unwrapped errors (SocketException, TimeoutException, TLS, etc.) are
+  // almost always transient connectivity problems. Default them to transient so
+  // the batch is rolled back and retried rather than permanently dropped.
   return PugTransportException(
     error.toString(),
-    permanent: true,
+    permanent: false,
     stackTrace: stackTrace,
   );
 }
