@@ -20,7 +20,7 @@ Both SDKs generate their typed event catalog from the same buf source
 | Public API edge cases | Repeated `init()` warns/no-ops; `identify()` before init warns/no-ops | Same | Complete |
 | Identify/profile merge | First identify sends anonymous ID; later calls omit it | Same | Complete |
 | Sessions | Lazy resolve, idle/max expiry, rotate/reset | Same | Complete |
-| Tracking consent | `optIn/optOut/getConsent/isTrackingEnabled`, `trackingConsent` option, persist | Same API and gating; `TrackingConsentConfig` with persist | Complete |
+| Tracking consent | `optInTracking/optOutTracking/getTrackingConsent/isTrackingEnabled`, `trackingConsent` option, persist | Same API and gating; `TrackingConsentConfig` with persist | Complete |
 | Default endpoint | `https://polru.pug.sh` | `https://polru.pug.sh` | Complete |
 | Persistent storage | `localStorage` with memory fallback | `SharedPreferencesPugStorage` default, with memory fallback | Complete |
 | Queue semantics | Two-phase lock/commit/rollback | Same | Complete |
