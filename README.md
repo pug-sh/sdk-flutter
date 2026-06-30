@@ -72,6 +72,8 @@ await Pug.init(
 );
 ```
 
+`endpoint` is optional and defaults to `https://polru.pug.sh`; set it only to point at a different backend (the examples above use a placeholder).
+
 `Pug.init(...)` uses shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type by default. To opt out of persistence, provide `storage: MemoryPugStorage()` or another custom `PugStorage`.
 
 Most public SDK calls are best-effort and do not throw. `Pug.track()`, `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, `Pug.destroy()`, and `PugPush` helpers catch and log runtime failures. `Pug.init()` still throws on invalid input or init failure, and `Pug.identify()` still throws on invalid input or transport failure. Repeated init calls and `identify()` calls before init are ignored with a warning.
@@ -125,10 +127,15 @@ await Pug.init(
 
 ## Tracking Consent
 
-Tracking consent gates **all** capture: `Pug.track(...)`, the typed
+Tracking consent gates event capture: `Pug.track(...)`, the typed
 `Pug.track.*` methods, `Pug.identify(...)`, and automatic
 lifecycle/page-view/notification events are dropped while consent is denied,
 and resume once it is granted.
+
+Two things are intentionally **not** gated: push device registration
+(`PugPush.subscribe(...)`), which mirrors the web SDK, and campaign/UTM capture
+from deep links — those params are still read into local storage while denied,
+but never leave the device until a consented `track(...)` attaches them.
 
 Consent is **granted** by default. To start denied (for example, until the user
 accepts a consent prompt) and persist their choice across launches:
@@ -159,8 +166,10 @@ Pug.getTrackingConsent(); // → TrackingConsent.granted | TrackingConsent.denie
 With `persist: true`, opt in/out is written to `__pug_<projectId>_consent__` and
 restored on the next `Pug.init(...)`. With `persist: false` (the default), the
 choice lasts only for the current process and resets to `defaultConsent` on
-restart. Consent is independent of `dryRun`, which suppresses delivery without
-changing consent.
+restart. Switching `persist` from `true` to `false` does not honor a previously
+persisted opt-out — a stored value is only read back when `persist` is `true`.
+Consent is independent of `dryRun`, which suppresses delivery without changing
+consent.
 
 ## Track Events
 

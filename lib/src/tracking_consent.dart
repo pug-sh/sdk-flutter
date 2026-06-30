@@ -22,6 +22,10 @@ class TrackingConsentConfig {
 
   /// Persist opt in/out to the configured [PugStorage] and restore any
   /// persisted value on the next `Pug.init(...)`. Defaults to `false`.
+  ///
+  /// A stored value is only read back while this is `true`, so switching from
+  /// `true` to `false` does not honor a previously persisted opt-out — it
+  /// reverts to [defaultConsent] on the next launch.
   final bool persist;
 }
 
@@ -61,7 +65,8 @@ class TrackingConsentController {
   void _set(TrackingConsent value) {
     _status = value;
     if (_persist) {
-      _storage.setString(_key, _encode(value));
+      // `name` is the wire format ('granted'/'denied'); see _restore.
+      _storage.setString(_key, value.name);
     }
   }
 
@@ -70,16 +75,10 @@ class TrackingConsentController {
     if (stored == null) {
       return;
     }
-    switch (stored) {
-      case 'granted':
-        _status = TrackingConsent.granted;
-      case 'denied':
-        _status = TrackingConsent.denied;
-      default:
-        _logger.warn('Stored tracking consent "$stored" is invalid; ignoring.');
+    try {
+      _status = TrackingConsent.values.byName(stored);
+    } on ArgumentError {
+      _logger.warn('Stored tracking consent "$stored" is invalid; ignoring.');
     }
   }
-
-  String _encode(TrackingConsent value) =>
-      value == TrackingConsent.granted ? 'granted' : 'denied';
 }

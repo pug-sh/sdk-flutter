@@ -103,7 +103,9 @@ class Pug implements TrackContext {
     try {
       final resolvedOptions = options.copyWith(
         logger: logger,
-        storage: options.storage ?? await SharedPreferencesPugStorage.create(),
+        storage:
+            options.storage ??
+            await SharedPreferencesPugStorage.create(logger: logger),
         autoPropertyProvider:
             options.autoPropertyProvider ??
             await SystemPugAutoPropertyProvider.create(logger: logger),
