@@ -114,14 +114,15 @@ PugTransportException _mapError(Object error, StackTrace stackTrace) {
     );
   }
   // Connect wraps most failures in ConnectException (handled above); anything
-  // else is unwrapped. Treat Dart `Error`s (programming bugs such as a failed
-  // protobuf encode — TypeError/StateError/ArgumentError) as permanent so a
-  // poison batch is dropped instead of retried forever. Everything else
-  // (SocketException, TimeoutException, TLS, etc.) is a transient connectivity
-  // problem: roll back and retry rather than drop.
+  // else is unwrapped. Treat Dart `Error`s (programming bugs —
+  // TypeError/StateError/ArgumentError) and `FormatException` (an undecodable
+  // response body will not decode on retry) as permanent, so a poison batch is
+  // dropped instead of retried forever. Everything else (SocketException,
+  // TimeoutException, TLS, etc.) is a transient connectivity problem: roll back
+  // and retry rather than drop.
   return PugTransportException(
     error.toString(),
-    permanent: error is Error,
+    permanent: error is Error || error is FormatException,
     stackTrace: stackTrace,
   );
 }

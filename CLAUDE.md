@@ -52,7 +52,7 @@ Campaign capture is enabled by default through `PugOptions.autoCaptureCampaigns`
 `PugStorage` is synchronous by design so event/session/profile reads can happen inside `track()`.
 
 - `MemoryPugStorage` is the fallback and explicit persistence opt-out.
-- `SafePugStorage` wraps a primary store and switches to memory if persistence throws.
+- `SafePugStorage` wraps a primary store and switches to memory if a storage call throws synchronously. (`SharedPreferencesPugStorage` write/remove failures surface asynchronously, so they are logged — key only — but do not trip the memory fallback.)
 - `SharedPreferencesPugStorage` provides default persistent storage for `Pug.init(...)`.
 
 State keys are project-namespaced:

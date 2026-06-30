@@ -404,6 +404,9 @@ class PugClient with WidgetsBindingObserver {
   }
 
   Future<void> destroy() async {
+    if (_disposed) {
+      return;
+    }
     _flushTimer?.cancel();
     try {
       // Best-effort final flush so queued events get a real send attempt before
@@ -421,6 +424,16 @@ class PugClient with WidgetsBindingObserver {
       // timer again in case the final flush rescheduled one on a transient
       // failure.
       _flushTimer?.cancel();
+      // Surface undelivered events so the loss is loud, not silent: the final
+      // flush above already logged a misleading "will be retried" on a
+      // transient failure, but the queue is about to be purged below.
+      final undelivered = _queue.size;
+      if (undelivered > 0) {
+        _options.logger.warn(
+          'Pug.destroy discarded $undelivered undelivered event(s) that could '
+          'not be flushed.',
+        );
+      }
       _queue.dispose();
       unawaited(_linkSubscription?.cancel());
       _linkProvider?.dispose();

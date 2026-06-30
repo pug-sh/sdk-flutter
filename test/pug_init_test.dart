@@ -155,19 +155,30 @@ void main() {
             permanent: false,
           );
     final storage = MemoryPugStorage();
-    final client = testClient(transport: transport, storage: storage);
+    final logger = CapturingLogger();
+    final client = testClient(
+      transport: transport,
+      storage: storage,
+      logger: logger,
+    );
 
     client.track('test_event');
     await client.identify('test-user');
     await Future<void>.delayed(Duration.zero);
     expect(storage.getString('__pug_project_session__'), isNotNull);
 
-    // The destroy-time flush fails transiently; teardown must still complete.
+    // The destroy-time flush fails transiently; teardown must still complete
+    // and the undelivered events must be reported rather than dropped silently.
     await client.destroy();
 
     expect(storage.getString('__pug_project_session__'), isNull);
     expect(storage.getString('__pug_project_profile__'), isNull);
     expect(storage.getString('__pug_project_queue__'), isNull);
+    expect(
+      logger.warnings.any((m) => m.contains('discarded')),
+      isTrue,
+      reason: 'destroy should report events it could not flush',
+    );
   });
 
   test('Pug.init binds the route observer callback', () async {
@@ -267,5 +278,7 @@ void main() {
     expect(logger.warnings, hasLength(2));
     expect(logger.warnings.any((m) => m.contains('persist')), isTrue);
     expect(logger.warnings.any((m) => m.contains('remove')), isTrue);
+    // The underlying error is observed, not swallowed.
+    expect(logger.debugs, isNotEmpty);
   });
 }

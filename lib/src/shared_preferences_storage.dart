@@ -38,7 +38,7 @@ class SharedPreferencesPugStorage implements PugStorage {
   void remove(String key) {
     // The plugin call is async; attach a handler so a rejected future is
     // observed and logged instead of becoming an unhandled error or a silent
-    // no-op. Log only the key (never the value) plus the error for diagnosis.
+    // no-op. Log only the key plus the error for diagnosis.
     unawaited(
       _removeKey(key).catchError((Object error) {
         logger?.warn('Pug could not remove "$key" from persistent storage.');

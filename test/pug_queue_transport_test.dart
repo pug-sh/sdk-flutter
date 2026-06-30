@@ -203,4 +203,12 @@ void main() {
     final mapped = mapConnectError(StateError('bad encode'), StackTrace.empty);
     expect(mapped.isPermanent, isTrue);
   });
+
+  test('connect transport maps undecodable responses as permanent', () {
+    final mapped = mapConnectError(
+      const FormatException('bad response body'),
+      StackTrace.empty,
+    );
+    expect(mapped.isPermanent, isTrue);
+  });
 }
