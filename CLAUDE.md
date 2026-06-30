@@ -80,7 +80,7 @@ Do not change this behavior casually; it prevents duplicate locks and avoids dro
 
 ### Transport
 
-`HttpPugTransport` sends binary protobuf payloads over Connect-compatible HTTP endpoints with `x-api-key` and `connect-protocol-version: 1`.
+`HttpPugTransport` sends binary protobuf payloads over Connect-compatible HTTP endpoints with `x-api-key` and `connect-protocol-version: 1`. The default endpoint is `https://polru.pug.sh` (matching the web SDK); override it via `PugOptions.endpoint`.
 
 RPC paths:
 

@@ -801,33 +801,6 @@ class FakeLinkProvider implements PugLinkProvider {
   }
 }
 
-class FakePushProvider implements PushProvider {
-  FakePushProvider({this.token = 'token-1', this.deleteError});
-
-  final String token;
-  final Object? deleteError;
-
-  @override
-  String get platform => 'android';
-
-  @override
-  String get provider => 'fake';
-
-  @override
-  Future<void> deleteToken() async {
-    final error = deleteError;
-    if (error != null) {
-      throw error;
-    }
-  }
-
-  @override
-  Future<String> getToken() async => token;
-
-  @override
-  Map<Object?, Object?> notificationData(Object source) => const {};
-}
-
 class TestRoute extends Route<dynamic> {
   TestRoute({required this.name});
 
