@@ -16,7 +16,7 @@ Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`.
 - Tracking consent gate with opt in/out and optional persistence.
 - Provider-neutral push registration.
 - Automatic campaign capture from app links and deep links.
-- Notification received, opened, and dismissed event helpers.
+- Notification received, clicked, and dismissed event helpers.
 - Injectable storage, transport, clock, ID generator, logger, and push provider for tests.
 - Well-known event constants for the shared event catalog.
 - Shared-preferences-backed initialization with richer mobile auto-properties.
@@ -125,10 +125,12 @@ await Pug.init(
 
 ## Tracking Consent
 
-Tracking consent gates **all** capture: `Pug.track(...)`, the typed
+Tracking consent gates event capture: `Pug.track(...)`, the typed
 `Pug.track.*` methods, `Pug.identify(...)`, and automatic
 lifecycle/page-view/notification events are dropped while consent is denied,
-and resume once it is granted.
+and resume once it is granted. Automatic campaign/deep-link capture is *not*
+gated — while denied it still records attribution locally, but transmits
+nothing until consent is granted.
 
 Consent is **granted** by default. To start denied (for example, until the user
 accepts a consent prompt) and persist their choice across launches:
@@ -160,7 +162,9 @@ With `persist: true`, opt in/out is written to `__pug_<projectId>_consent__` and
 restored on the next `Pug.init(...)`. With `persist: false` (the default), the
 choice lasts only for the current process and resets to `defaultConsent` on
 restart. Consent is independent of `dryRun`, which suppresses delivery without
-changing consent.
+changing consent. Consent activity (denied drops and persistence failures) is
+logged only through the configured `PugLogger`; the default `NoopPugLogger` is
+silent.
 
 ## Track Events
 

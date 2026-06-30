@@ -8,8 +8,11 @@ enum TrackingConsent { granted, denied }
 ///
 /// Mirrors the web SDK's `trackingConsent` option. When consent is
 /// [TrackingConsent.denied], `track()`, the typed `Pug.track.*` methods,
-/// `identify()`, and all automatic capture (lifecycle, page views,
-/// notifications) are dropped until [Pug.optInTracking] is called.
+/// `identify()`, and automatic capture (lifecycle, page views, notifications)
+/// are dropped until `Pug.optInTracking` is called. Automatic campaign /
+/// deep-link capture is not gated: while denied, parameters are still recorded
+/// locally and attached to later events, but nothing is transmitted (event
+/// creation is gated) until a subsequent opt-in.
 class TrackingConsentConfig {
   const TrackingConsentConfig({
     this.defaultConsent = TrackingConsent.granted,
@@ -22,6 +25,9 @@ class TrackingConsentConfig {
 
   /// Persist opt in/out to the configured [PugStorage] and restore any
   /// persisted value on the next `Pug.init(...)`. Defaults to `false`.
+  ///
+  /// A persistence failure is reported only through the configured `PugLogger`,
+  /// which is silent by default (`NoopPugLogger`).
   final bool persist;
 }
 
@@ -61,7 +67,9 @@ class TrackingConsentController {
   void _set(TrackingConsent value) {
     _status = value;
     if (_persist) {
-      _storage.setString(_key, _encode(value));
+      // Persisted as the enum's `.name` ('granted'/'denied') — the wire format
+      // shared with the web SDK, so do not rename the enum values.
+      _storage.setString(_key, value.name);
     }
   }
 
@@ -70,16 +78,11 @@ class TrackingConsentController {
     if (stored == null) {
       return;
     }
-    switch (stored) {
-      case 'granted':
-        _status = TrackingConsent.granted;
-      case 'denied':
-        _status = TrackingConsent.denied;
-      default:
-        _logger.warn('Stored tracking consent "$stored" is invalid; ignoring.');
+    final restored = TrackingConsent.values.asNameMap()[stored];
+    if (restored == null) {
+      _logger.warn('Stored tracking consent "$stored" is invalid; ignoring.');
+      return;
     }
+    _status = restored;
   }
-
-  String _encode(TrackingConsent value) =>
-      value == TrackingConsent.granted ? 'granted' : 'denied';
 }
