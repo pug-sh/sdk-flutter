@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 ## Project Overview
 
-Pug Flutter SDK is a Flutter/Dart analytics, identity, session, batching, and push device registration SDK. It is intended to match the product semantics of `../cotton-web-sdk` while using Flutter-native lifecycle and storage APIs.
+Pug Flutter SDK is a Flutter/Dart analytics, identity, session, batching, and push device registration SDK. It is intended to match the product semantics of `../sdk-web` while using Flutter-native lifecycle and storage APIs.
 
 The public barrel is `lib/pug_sdk.dart`. Core runtime logic lives under `lib/src/`; generated protobuf Dart code lives under `lib/src/gen/` and is produced from `proto/**/*.proto`.
 
@@ -33,6 +33,7 @@ make check        # protos + format + analyze + test
 - All public SDK calls are best-effort and must never throw.
 - `Pug.identify(externalId, traits:)` logs failures and completes normally.
 - `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` manage identity/session/runtime state.
+- `Pug.optInTracking()`, `Pug.optOutTracking()`, `Pug.getTrackingConsent()`, and `Pug.isTrackingEnabled()` manage tracking consent. See `### Tracking Consent`.
 - `Pug.track` is a callable `TrackNamespace`:
   - `Pug.track('kind', props: {...})` — custom/dynamic event names (untyped, discouraged for well-known events).
   - `Pug.track.<event>(...)` — one typed method per well-known event (codegen'd from `proto/`). Required fields are compile-time enforced; `extras: Map<String, Object?>` is always available for ad-hoc props.
@@ -59,9 +60,11 @@ State keys are project-namespaced:
 
 - `__pug_<projectId>_session__`
 - `__pug_<projectId>_profile__`
+- `__pug_<projectId>_device_id__`
 - `__pug_<projectId>_external_id__`
 - `__pug_<projectId>_queue__`
 - `__pug_<projectId>_campaign__`
+- `__pug_<projectId>_consent__` (only when `trackingConsent.persist` is set)
 
 ### Queue
 
@@ -77,7 +80,7 @@ Do not change this behavior casually; it prevents duplicate locks and avoids dro
 
 ### Transport
 
-`ConnectPugTransport` (in `lib/src/connect_transport.dart`) sends binary protobuf payloads over Connect-compatible HTTP endpoints. It sets `x-api-key`; the `connectrpc` client adds `connect-protocol-version: 1`. Unknown/unwrapped transport errors (e.g. `SocketException`) are treated as transient so the batch is retried, not dropped.
+`ConnectPugTransport` (in `lib/src/connect_transport.dart`) sends binary protobuf payloads over Connect-compatible HTTP endpoints. It sets `x-api-key`; the `connectrpc` client adds `connect-protocol-version: 1`. The default endpoint is `https://polru.pug.sh` (matching the web SDK); override it via `PugOptions.endpoint`. Unknown/unwrapped transport errors (e.g. `SocketException`) are treated as transient so the batch is retried, not dropped.
 
 RPC paths:
 
@@ -124,6 +127,12 @@ Sessions are lazily resolved on event creation. Defaults match the web/mobile sp
 
 Anonymous profile IDs are prefixed with `anon-`. The first successful `identify()` includes anonymous ID for backend merge semantics; subsequent identifies omit it.
 
+### Tracking Consent
+
+`TrackingConsentController` in `lib/src/tracking_consent.dart` holds consent state and gates capture, matching the web SDK's consent model. When consent is `denied`, `track()` (typed and untyped), `identify()`, and automatic capture (lifecycle, page views, notifications) are dropped; `identify()` returns normally without hitting transport. The gate lives in `PugClient.track()`/`identify()` and is checked before sampling. Automatic campaign/deep-link capture is *not* gated: while denied, campaign parameters are still written to `__pug_<projectId>_campaign__` and attached to later events, but nothing is transmitted until consent is granted (event creation is gated). Consent activity — denied-drop debug logs, an invalid persisted value, or a `SafePugStorage` persistence failure — is reported only through the configured `PugLogger`; the default `NoopPugLogger` discards debug/warn/error, so configure a logger to observe consent behavior.
+
+Consent is configured through `PugOptions.trackingConsent` (`TrackingConsentConfig`): `defaultConsent` (default `granted`) seeds first-run state, and `persist` (default `false`) mirrors opt in/out to the project-scoped key `__pug_<projectId>_consent__` and restores it on the next `init()`. The runtime exposes `optInTracking()`, `optOutTracking()`, `trackingConsent`, and `isTrackingEnabled`, surfaced publicly on `Pug`. Consent is independent of `dryRun`, which suppresses delivery without changing consent. `destroy()` does not clear persisted consent, so a user's opt-out survives teardown.
+
 ### Push
 
 Push is provider-neutral at the API level through `PushProvider`. No concrete provider ships with the SDK; host apps supply their own `PushProvider` implementation. The notification received/clicked/dismissed tracking helpers on `PugPush` are implemented today; an FCM (or other) provider may be packaged as a separate add-on. All three notification helpers send immediately, since notification callbacks often fire while the app is backgrounded.
@@ -147,7 +156,7 @@ Notification payload sanitization keeps only flat strings, booleans, finite numb
 - Do not log API keys, push tokens, or full request payloads by default.
 - Prefer small injectable interfaces over hard-coded platform dependencies.
 
-## Current Feature Parity With `../cotton-web-sdk`
+## Current Feature Parity With `../sdk-web`
 
 Implemented parity:
 
@@ -157,6 +166,7 @@ Implemented parity:
 - Persistent queue semantics with lock/commit/rollback.
 - Session expiry, rotation, reset, and profile distinct ID behavior.
 - `identify()` first-call anonymous merge behavior and device ID linking.
+- Tracking consent gate (opt in/out, optional persistence) over track/identify/auto-capture.
 - Well-known event names, typed track methods, and type-based property mapping.
 - Provider-neutral push registration model.
 - Notification received/clicked/dismissed helpers.

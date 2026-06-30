@@ -7,6 +7,11 @@ import 'test_support.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('default endpoint points at production, not localhost', () {
+    const options = PugOptions(apiKey: 'key');
+    expect(options.endpoint, 'https://polru.pug.sh');
+  });
+
   test(
     'init validates required values and repeated init warns and is ignored',
     () async {
