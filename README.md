@@ -13,9 +13,10 @@ Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`.
 - Local event queue with lock, commit, and rollback semantics.
 - Batched protobuf transport with `x-api-key` authentication.
 - `identify()` profile merge semantics with first-call anonymous ID linking.
+- Tracking consent gate with opt in/out and optional persistence.
 - Provider-neutral push registration.
 - Automatic campaign capture from app links and deep links.
-- Notification received, opened, and dismissed event helpers.
+- Notification received, clicked, and dismissed event helpers.
 - Injectable storage, transport, clock, ID generator, logger, and push provider for tests.
 - Well-known event constants for the shared event catalog.
 - Shared-preferences-backed initialization with richer mobile auto-properties.
@@ -71,6 +72,8 @@ await Pug.init(
 );
 ```
 
+`endpoint` is optional and defaults to `https://polru.pug.sh`; set it only to point at a different backend (the examples above use a placeholder).
+
 `Pug.init(...)` uses shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type by default. To opt out of persistence, provide `storage: MemoryPugStorage()` or another custom `PugStorage`.
 
 Most public SDK calls are best-effort and do not throw. `Pug.track()`, `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, `Pug.destroy()`, and `PugPush` helpers catch and log runtime failures. `Pug.init()` still throws on invalid input or init failure, and `Pug.identify()` still throws on invalid input or transport failure. Repeated init calls and `identify()` calls before init are ignored with a warning.
@@ -121,6 +124,49 @@ await Pug.init(
   ),
 );
 ```
+
+## Tracking Consent
+
+Tracking consent gates event capture: `Pug.track(...)`, the typed
+`Pug.track.*` methods, `Pug.identify(...)`, and automatic
+lifecycle/page-view/notification events are dropped while consent is denied,
+and resume once it is granted. Automatic campaign/deep-link capture is *not*
+gated — while denied it still records attribution locally, but transmits
+nothing until consent is granted.
+
+Consent is **granted** by default. To start denied (for example, until the user
+accepts a consent prompt) and persist their choice across launches:
+
+```dart
+await Pug.init(
+  'project-id',
+  const PugOptions(
+    apiKey: 'pug_api_key',
+    trackingConsent: TrackingConsentConfig(
+      defaultConsent: TrackingConsent.denied,
+      persist: true,
+    ),
+  ),
+);
+```
+
+Flip consent at runtime:
+
+```dart
+Pug.optInTracking(); // grant — events flow
+Pug.optOutTracking(); // deny — events are dropped
+
+Pug.isTrackingEnabled(); // → bool (consent only; independent of dryRun)
+Pug.getTrackingConsent(); // → TrackingConsent.granted | TrackingConsent.denied
+```
+
+With `persist: true`, opt in/out is written to `__pug_<projectId>_consent__` and
+restored on the next `Pug.init(...)`. With `persist: false` (the default), the
+choice lasts only for the current process and resets to `defaultConsent` on
+restart. Consent is independent of `dryRun`, which suppresses delivery without
+changing consent. Consent activity (denied drops and persistence failures) is
+logged only through the configured `PugLogger`; the default `NoopPugLogger` is
+silent.
 
 ## Track Events
 

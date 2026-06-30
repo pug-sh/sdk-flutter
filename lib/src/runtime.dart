@@ -16,6 +16,7 @@ import 'events.dart';
 import 'profile_manager.dart';
 import 'push_models.dart';
 import 'session_manager.dart';
+import 'tracking_consent.dart';
 import 'version.dart';
 
 class PugRouteObserver extends NavigatorObserver {
@@ -88,6 +89,12 @@ class PugClient with WidgetsBindingObserver {
       logger: _options.logger,
       maxQueueSize: _options.batch.maxQueueSize,
     );
+    _consent = TrackingConsentController(
+      projectId: projectId,
+      storage: _storage,
+      logger: _options.logger,
+      config: _options.trackingConsent,
+    );
   }
 
   static void Function(String?, String?)? onRouteChanged;
@@ -119,6 +126,7 @@ class PugClient with WidgetsBindingObserver {
   final SafePugStorage _storage;
   late final PugTransport _transport;
   late final PugEventQueue _queue;
+  late final TrackingConsentController _consent;
   Timer? _flushTimer;
   StreamSubscription<Uri>? _linkSubscription;
   PugLinkProvider? _linkProvider;
@@ -178,7 +186,16 @@ class PugClient with WidgetsBindingObserver {
     TrackOptions options = const TrackOptions(),
   }) {
     try {
-      if (_disposed || kind.trim().isEmpty || !_sampledIn()) {
+      if (_disposed || kind.trim().isEmpty) {
+        return;
+      }
+      if (!_consent.isGranted) {
+        _options.logger.debug(
+          'Pug track("$kind") dropped because tracking consent is denied.',
+        );
+        return;
+      }
+      if (!_sampledIn()) {
         return;
       }
       final event = _createEvent(kind, props, options.timestampMillis);
@@ -213,6 +230,12 @@ class PugClient with WidgetsBindingObserver {
     }
     if (externalId.trim().isEmpty) {
       throw ArgumentError('externalId is required');
+    }
+    if (!_consent.isGranted) {
+      _options.logger.debug(
+        'Pug identify() dropped because tracking consent is denied.',
+      );
+      return;
     }
     final profile = _resolveProfile();
     final firstIdentify = profile.externalId == null;
@@ -259,6 +282,14 @@ class PugClient with WidgetsBindingObserver {
       ),
     );
   }
+
+  TrackingConsent get trackingConsent => _consent.status;
+
+  bool get isTrackingEnabled => _consent.isGranted;
+
+  void optInTracking() => _consent.optIn();
+
+  void optOutTracking() => _consent.optOut();
 
   Future<void> flush() async {
     if (_isFlushing || _disposed || _options.dryRun || _queue.size == 0) {
@@ -665,6 +696,7 @@ PugOptions _normalizeOptions(PugOptions options) {
     autoPageViews: options.autoPageViews,
     dryRun: options.dryRun,
     autoCaptureCampaigns: options.autoCaptureCampaigns,
+    trackingConsent: options.trackingConsent,
     logger: logger,
     storage: options.storage,
     transport: options.transport,

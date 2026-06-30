@@ -1,11 +1,12 @@
 import 'auto_properties.dart';
 import 'campaign.dart';
 import 'contracts.dart';
+import 'tracking_consent.dart';
 
 class PugOptions {
   const PugOptions({
     required this.apiKey,
-    this.endpoint = 'http://localhost:8080',
+    this.endpoint = 'https://polru.pug.sh',
     this.samplingRate = 1.0,
     this.batch = const BatchConfig(),
     this.session = const SessionConfig(),
@@ -13,6 +14,7 @@ class PugOptions {
     this.autoPageViews = true,
     this.dryRun = false,
     this.autoCaptureCampaigns = true,
+    this.trackingConsent = const TrackingConsentConfig(),
     this.logger = const NoopPugLogger(),
     this.storage,
     this.transport,
@@ -29,6 +31,7 @@ class PugOptions {
   final bool autoPageViews;
   final bool dryRun;
   final bool autoCaptureCampaigns;
+  final TrackingConsentConfig trackingConsent;
   final PugLogger logger;
   final PugStorage? storage;
   final PugTransport? transport;
@@ -45,6 +48,7 @@ class PugOptions {
     bool? autoPageViews,
     bool? dryRun,
     bool? autoCaptureCampaigns,
+    TrackingConsentConfig? trackingConsent,
     PugLogger? logger,
     PugStorage? storage,
     PugTransport? transport,
@@ -61,6 +65,7 @@ class PugOptions {
       autoPageViews: autoPageViews ?? this.autoPageViews,
       dryRun: dryRun ?? this.dryRun,
       autoCaptureCampaigns: autoCaptureCampaigns ?? this.autoCaptureCampaigns,
+      trackingConsent: trackingConsent ?? this.trackingConsent,
       logger: logger ?? this.logger,
       storage: storage ?? this.storage,
       transport: transport ?? this.transport,
