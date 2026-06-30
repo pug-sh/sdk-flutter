@@ -176,6 +176,23 @@ void main() {
     expect(autoProperties[r'$networkType']?.value, 'wifi');
   });
 
+  test(
+    'system osVersion prefers preloaded device info over Platform string',
+    () {
+      final provider = SystemPugAutoPropertyProvider(
+        staticProperties: const {r'$osVersion': '17.2'},
+      );
+      expect(provider.properties()[r'$osVersion'], '17.2');
+    },
+  );
+
+  test('system osVersion falls back to Platform when not preloaded', () {
+    final provider = SystemPugAutoPropertyProvider();
+    final osVersion = provider.properties()[r'$osVersion'];
+    expect(osVersion, isA<String>());
+    expect(osVersion as String, isNotEmpty);
+  });
+
   test('campaign properties are captured from initial app link', () async {
     final client = testClient(
       linkProvider: FakeLinkProvider(
