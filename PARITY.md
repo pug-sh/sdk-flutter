@@ -1,309 +1,216 @@
-# Pug Flutter SDK Parity With `../cotton-web-sdk`
+# Pug Flutter SDK Parity With `../sdk-web`
 
-This document compares the Flutter SDK in this repository with the sibling web SDK at `../cotton-web-sdk`.
+This document compares the Flutter SDK in this repository with the sibling web
+SDK at `../sdk-web`.
 
-The goal is product-semantic parity where it makes sense for mobile. Browser-only behavior should not be copied directly unless there is a native mobile equivalent that is reliable, expected, and low-risk for host apps.
+The goal is product-semantic parity where it makes sense for mobile. Browser-only
+behavior should not be copied directly unless there is a native mobile equivalent
+that is reliable, expected, and low-risk for host apps.
+
+Both SDKs generate their typed event catalog from the same buf source
+(`buf.build/fivebits/pug`), platform-filtered per event.
 
 ## Summary
 
-| Area                        | Web SDK                                                     | Flutter SDK                                                                 | Parity                      |
-| --------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------- |
-| Singleton lifecycle         | `init`, `destroy`, `reset`, `rotate`                        | `Pug.init`, `Pug.destroy`, `Pug.reset`, `Pug.rotate`, `Pug.flush`          | Complete (+ explicit flush) |
-| Manual event tracking       | `track(kind, props?, opts?)`                                | `Pug.track(kind, props:, options:)`                                         | Complete                    |
-| Public API edge cases       | Repeated `init()` warns/no-ops; `identify()` before init warns/no-ops | Same                                                                        | Complete                    |
-| Identify/profile merge      | First identify sends anonymous ID; later calls omit it      | Same anonymous-merge behavior                                                | Complete                    |
-| Sessions                    | Lazy resolve, idle/max expiry, rotate/reset                 | Same mobile semantics                                                        | Complete                    |
-| Device ID                   | Push device-ID key, used for push identity/linking          | Project-scoped device-ID key, preserved across session rotation              | Complete                    |
-| Persistent storage          | `localStorage` with memory fallback                         | `SharedPreferencesPugStorage` default, with memory fallback                  | Complete                    |
-| Queue semantics             | Two-phase lock/commit/rollback                              | Two-phase lock/commit/rollback                                               | Complete                    |
-| Batching                    | Size/timer flush, immediate sends                           | Size/timer flush, immediate sends                                            | Complete                    |
-| Transport                   | Connect-compatible protobuf HTTP                            | Connect-compatible protobuf HTTP                                             | Complete                    |
-| API key transport           | `x-api-key`; beacon uses query param                        | `x-api-key`                                                                  | Complete for normal HTTP    |
-| Shutdown delivery           | `sendBeacon` on unload                                      | Best-effort async flush on background/destroy                                | Mobile equivalent           |
-| Well-known events           | 21 names typed/validated at runtime                         | 24 names mirrored in schemas + `PugEventNames` constants                     | Flutter ahead, validation gap remains |
-| Property mapping            | Typed protobuf values, schema-aware known props             | Typed protobuf values, loose property mapping                                | Partial                     |
-| Wire validation             | Client-side request validation                              | No full client-side request validation                                       | Partial                     |
-| Sampling                    | `samplingRate` clamped at init, not yet enforced            | `samplingRate` enforced per event                                            | Flutter ahead               |
-| Logging & DI                | Fixed console logger, no DI seams                           | Injectable + crash-safe logger, full DI                                      | Flutter ahead               |
-| Auto properties             | Browser URL/referrer/title/screen/locale/UA/UTM             | Mobile app/device/screen/network/locale/campaign                             | Mobile equivalent           |
-| Campaign/UTM capture        | Current page URL query params                               | Initial/later app links and deep links                                       | Mobile equivalent           |
-| Auto page views             | `page_view` from History API/popstate                       | `page_view` via `PugRouteObserver()` when host app registers it              | Mobile equivalent           |
-| Auto clicks                 | DOM click listener                                          | Not automatic                                                                | Intentionally omitted       |
-| Auto scroll                 | DOM/window scroll tracker                                   | Not automatic                                                                | Intentionally omitted       |
-| Auto forms                  | DOM form/input tracker                                      | Not automatic                                                                | Intentionally omitted       |
-| Frustration signals         | `rage_click`, `dead_click`                                  | Not automatic                                                                | Intentionally omitted       |
-| Push subscription           | Optional web-push/VAPID module                              | Provider-neutral push API                                                    | Mobile equivalent           |
-| Notification click tracking | Service worker + page helper                                | Explicit mobile notification helper hooks (received/clicked/dismissed)       | Mobile equivalent (+ more)  |
-| Package optionality         | Push is tree-shakeable and optional                         | Core package is provider-neutral; no provider bundled                        | Complete                    |
+| Area | Web SDK | Flutter SDK | Parity |
+| --- | --- | --- | --- |
+| Singleton lifecycle | `init`, `destroy`, `reset`, `rotate` | `Pug.init/destroy/reset/rotate/flush` | Complete (+ explicit flush) |
+| Manual event tracking | `track(kind, props?, opts?)` | `Pug.track(kind, props:, options:)` | Complete |
+| Typed event API | `track()` + `WellKnownEventPropsMap` types | `Pug.track.<event>(...)` codegen'd methods, required fields compile-time enforced | Complete (different mechanism) |
+| Public API edge cases | Repeated `init()` warns/no-ops; `identify()` before init warns/no-ops | Same | Complete |
+| Identify/profile merge | First identify sends anonymous ID; later calls omit it | Same | Complete |
+| Sessions | Lazy resolve, idle/max expiry, rotate/reset | Same | Complete |
+| Tracking consent | `optInTracking/optOutTracking/getTrackingConsent/isTrackingEnabled`, `trackingConsent` option, persist | Same API and gating; `TrackingConsentConfig` with persist | Complete |
+| Default endpoint | `https://polru.pug.sh` | `https://polru.pug.sh` | Complete |
+| Persistent storage | `localStorage` with memory fallback | `SharedPreferencesPugStorage` default, with memory fallback | Complete |
+| Queue semantics | Two-phase lock/commit/rollback | Same | Complete |
+| Batching | Size/timer flush, immediate sends | Same | Complete |
+| Transport | Connect-compatible protobuf HTTP, `x-api-key` | Same | Complete |
+| Well-known event catalog | 119 names (4 DOM-only) | 123 names (8 mobile-only); **115 shared** | Complete (platform-filtered) |
+| Property mapping | Schema-aware coercion for known fields in `track()` | Compile-time field types via typed API; loose for untyped/extras | Equivalent for typed calls |
+| Wire validation | Client-side protovalidate | None (protovalidate has no Dart support) | Accepted divergence |
+| Sampling | None | `samplingRate` enforced per event | Flutter ahead |
+| Logging & DI | Fixed console logger, no DI seams | Injectable + crash-safe logger, full DI | Flutter ahead |
+| Auto properties | Browser URL/referrer/title/screen/locale/UA/UTM | Mobile app/device/screen/network/locale/timezone/campaign | Mobile equivalent |
+| Per-event screen context | `$url`/`$referrer`/`$pageTitle` on every event | `url`/`referrer` on `page_view` only | Low-Medium gap |
+| Campaign/UTM capture | URL query params (UTM only) | App/deep links (UTM + gclid/fbclid/msclkid/ttclid) | Mobile equivalent (+ more) |
+| Auto page views | `page_view` from History API/popstate | `page_view` via `PugRouteObserver` (host registers it) | Mobile equivalent |
+| DOM interaction trackers | click/scroll/form/rage_click/dead_click | Not automatic (no DOM) | Intentional divergence |
+| Shutdown delivery | `sendBeacon` on unload | Best-effort flush on background/destroy | Mobile equivalent |
+| Push subscription | Web-push/VAPID module | Provider-neutral push API | Mobile equivalent |
+| Notification tracking | `notification_clicked` | received/clicked/dismissed helpers | Flutter ahead |
+| Package optionality | Push is tree-shakeable | Core is provider-neutral; no provider bundled | Complete |
 
 ## Public API
 
 ### Web
 
-`../cotton-web-sdk/src/pug.ts` exports:
-
-- `init(projectId, options)` — throws on empty `projectId`/`apiKey`
-- `track(kind, props?, opts?)` — never throws
-- `identify(externalId, traits?)` — throws on invalid input and re-throws transport errors
-- `reset()`
-- `rotate()`
-- `destroy()`
+`../sdk-web/src/pug.ts` exports `init`, `track`, `identify`, `reset`, `rotate`,
+`destroy`, and the consent functions `optInTracking`, `optOutTracking`,
+`getTrackingConsent`, `isTrackingEnabled`.
 
 ### Flutter
 
-`lib/src/pug.dart` exposes:
+`lib/src/pug.dart` exposes the same surface on the `Pug` singleton:
+`init`, `track` (callable `TrackNamespace`), `identify`, `reset`, `rotate`,
+`flush` (Flutter-only), `destroy`, and `optInTracking`, `optOutTracking`,
+`getTrackingConsent`, `isTrackingEnabled`. `lib/src/push.dart` exposes
+provider-neutral push helpers through `PugPush`.
 
-- `Pug.init(projectId, options)` — asynchronous; throws on invalid input or init failure; repeated init warns/no-ops
-- `Pug.track(kind, props:, options:)` — never throws
-- `Pug.identify(externalId, traits:)` — asynchronous; throws on invalid input or transport failure; warns/no-ops before init
-- `Pug.reset()`
-- `Pug.rotate()`
-- `Pug.flush()` — Flutter-only public API
-- `Pug.destroy()`
+**Typed events:** Flutter exposes a typed method per well-known event
+(`Pug.track.purchase(...)`) with compile-time required-field and value-type
+checking — an ergonomic the web SDK approximates with `WellKnownEventPropsMap`.
+The untyped `Pug.track('kind', props:)` escape hatch remains for custom kinds and
+emits a debug hint when used with a well-known kind.
 
-`lib/src/push.dart` exposes provider-neutral push helpers through `PugPush`.
+## Tracking Consent
 
-**Parity note:** Dart cannot match TypeScript's overloaded `TrackFn` and `WellKnownEventPropsMap` ergonomics directly. Flutter exposes `PugEventNames` constants, but not typed prop overloads. Also, the current web SDK code only types and validates 21 well-known event names in `src/well-known-events.ts`, while Flutter mirrors 24 names from `lib/src/events.dart`.
+Both SDKs gate **all** capture on consent: `track()` (typed and untyped),
+`identify()`, and automatic capture are dropped while consent is denied and
+resume once granted. Consent defaults to `granted`.
 
-## Initialization And Lifecycle
+- Configured via `PugOptions.trackingConsent` (`TrackingConsentConfig`):
+  `defaultConsent` seeds first-run state; `persist` mirrors opt in/out to
+  `__pug_<projectId>_consent__` and restores it on the next `init()`.
+- Runtime controls: `Pug.optInTracking()`, `Pug.optOutTracking()`,
+  `Pug.getTrackingConsent()`, `Pug.isTrackingEnabled()`.
+- Consent is independent of `dryRun`, which suppresses delivery without changing
+  consent. `identify()` returns normally (no throw) when consent is denied.
 
-Web `init()` configures session/profile state, creates the batched transport, warms UA data, and installs browser auto-trackers. `destroy()` removes tracker cleanups, destroys transport state, clears persisted identity/session state, and allows re-init.
+**Parity status:** Complete.
 
-Flutter `Pug.init()` asynchronously prepares shared-preferences storage and system auto-properties, then starts `PugClient`. `destroy()` cancels timers, starts a best-effort final flush, disposes queue state, removes lifecycle observation, stops campaign link listening, and clears persisted SDK state.
+## Event Creation And Property Mapping
 
-**Parity status:** Complete, with mobile lifecycle substitutions.
+Both SDKs build `sdk.events.v1.Event` payloads with event ID, kind, session ID,
+distinct ID, occurrence time, custom properties, and auto-properties. Strings are
+truncated to 1024 UTF-8 bytes; `null` and non-finite numbers are dropped.
 
-## Event Creation
+Mapping differs in mechanism:
 
-Both SDKs build protobuf `sdk.events.v1.Event` payloads with event ID, kind, session ID, distinct ID, occurrence time, custom properties, and auto-properties.
+- **Web** validates a well-known event against its generated schema in `track()`
+  and picks the proto scalar oneof from the field type (`scalarToPropertyValue`),
+  so an integer-valued double field still serializes as `doubleValue`.
+- **Flutter** achieves the same wire types through the **typed** `Pug.track.*`
+  layer: Dart parameter types (`double amount`) force the correct oneof at compile
+  time. The **untyped** `Pug.track('purchase', props: {'amount': 99})` path uses
+  loose runtime mapping (`int` → `intValue`), so it does not schema-coerce known
+  fields the way web's `track()` does. `mapEventProperties` does not consult the
+  schema registry; that registry is used only to detect well-known kinds.
 
-Important differences:
-
-- Web validates 21 well-known events against generated schemas and preserves schema scalar types for known fields.
-- Flutter currently does not validate well-known events against the mirrored schema registry. `PropertyMapper.mapEventProperties(...)` delegates directly to loose `mapProperties(...)`, so known-field type rules, required fields, and range constraints are not enforced client-side.
-- Flutter currently treats three names as well-known that the web SDK does not yet type/validate in code: `checkout_completed`, `login`, and `logout`.
-
-Strings are truncated to 1024 UTF-8 bytes in Flutter. The shared proto limit is 1024 codepoints, so Flutter is conservative but not byte-for-byte identical to web behavior.
-
-**Parity status:** Partial.
+**Parity status:** Equivalent for typed calls; minor divergence for untyped
+well-known calls and client-side validation (see Wire Validation).
 
 ## Auto Properties
 
-### Web Auto Properties
+Verified by diffing the `$`-prefixed keys each SDK emits.
 
-The web SDK includes browser-oriented auto-properties such as:
+- **Shared (12):** `$projectId`, `$sdkVersion`, `$locale`, `$os`, `$osVersion`,
+  `$screenWidth`, `$screenHeight`, `$utmSource`, `$utmMedium`, `$utmCampaign`,
+  `$utmContent`, `$utmTerm`.
+- **Web-only (7):** `$url`, `$referrer`, `$pageTitle`, and the UA client hints
+  `$browser`, `$browserVersion`, `$device`, `$mobile`.
+- **Flutter-only (15):** app identity (`$appName`, `$appPackage`, `$appVersion`,
+  `$appBuild`), device identity (`$platform`, `$deviceManufacturer`,
+  `$deviceModel`, `$deviceName`), context (`$networkType`, `$timezone`,
+  `$screenScale`), and campaign click IDs (`$gclid`, `$fbclid`, `$msclkid`,
+  `$ttclid`).
 
-- `$projectId`
-- `$url`
-- `$referrer`
-- `$locale`
-- `$screenWidth`
-- `$screenHeight`
-- `$pageTitle`
-- `$sdkVersion`
-- UA client hints where available
-- UTM params from the current URL
-
-### Flutter Auto Properties
-
-The Flutter SDK includes mobile-oriented auto-properties such as:
-
-- `$projectId`
-- `$sdkVersion`
-- `$platform`
-- `$os`
-- `$osVersion`
-- `$locale`
-- `$timezone`
-- `$screenWidth`
-- `$screenHeight`
-- `$screenScale`
-- `$appName`
-- `$appPackage`
-- `$appVersion`
-- `$appBuild`
-- `$deviceManufacturer`
-- `$deviceModel`
-- `$deviceName` where available
-- `$networkType`
-
-Campaign auto-properties are captured from app/deep links and persisted:
-
-- `$utmSource`
-- `$utmMedium`
-- `$utmCampaign`
-- `$utmTerm`
-- `$utmContent`
-- `$gclid`
-- `$fbclid`
-- `$msclkid`
-- `$ttclid`
+The shared core plus each platform's natural extras. Web tags every event with
+current `$url`/`$referrer`/`$pageTitle`; Flutter attaches `url`/`referrer` to
+`page_view` events only (see Remaining Gaps).
 
 **Parity status:** Mobile equivalent.
 
 ## Sessions And Identity
 
-Both SDKs:
-
-- lazily resolve sessions on event creation
-- default to 30 minute idle timeout and 1440 minute max duration
-- rotate sessions while preserving device ID
-- reset both session and device identity
-- use anonymous profile IDs prefixed with `anon-`
-- send anonymous ID only on the first successful identify merge
-- persist external ID for future events
-
-Flutter stores state under project-scoped keys for session, profile, device ID, external ID, queue, and campaign context.
+Both SDKs lazily resolve sessions on event creation, default to 30 minute idle /
+1440 minute max duration, rotate sessions while preserving device ID, reset both
+session and device identity, prefix anonymous IDs with `anon-`, send the anonymous
+ID only on the first successful identify merge, and persist the external ID.
+Flutter stores state under project-scoped keys for session, profile, device ID,
+external ID, queue, campaign, and (when persisted) consent.
 
 **Parity status:** Complete.
 
 ## Queue And Transport
 
-Both SDKs:
-
-- queue events before sending
-- flush by batch size and max wait
-- support immediate sends
-- use lock/commit/rollback for in-flight batches
-- drop permanent failures and roll back transient failures
-- send binary protobuf payloads to Connect-compatible endpoints
-- send API keys with `x-api-key`
-
-The transport RPC paths are shared:
+Both SDKs queue events, flush by batch size and max wait, support immediate sends,
+use lock/commit/rollback for in-flight batches, drop permanent failures and roll
+back transient ones, and send binary protobuf to Connect-compatible endpoints with
+`x-api-key`. Shared RPC paths:
 
 - `/sdk.events.v1.EventsService/BatchCreate`
 - `/sdk.profiles.v1.ProfilesSDKService/Identify`
 - `/sdk.devices.v1.DevicesService/Subscribe`
 
-Web uses `navigator.sendBeacon` during unload. Flutter uses best-effort async flush on background/destroy.
+Web uses `navigator.sendBeacon` on unload; Flutter uses best-effort async flush on
+background/destroy. Behavioral nuances: web debounces `localStorage` writes while
+Flutter persists synchronously on queue mutations; Flutter doubles its retry
+backoff once (`max(maxWaitMs, 1000) * 2`).
 
 **Parity status:** Complete for normal transport; mobile equivalent for shutdown.
 
-## Error Handling And Resilience
+## Well-Known Event Catalog
 
-Compared with the web SDK:
+Verified by diffing the generated catalogs:
 
-- `track()`, `reset()`, `rotate()`, `flush()`, `destroy()`, and `PugPush` helpers are best-effort and catch/log failures.
-- `Pug.init()` matches web on invalid-input throwing and repeated-init warn/no-op behavior.
-- `Pug.identify()` matches web on invalid-input throwing, transport-failure propagation, and pre-init warn/no-op behavior.
-- `SafePugLogger` prevents a buggy caller-supplied logger from crashing the app.
-- `SafePugStorage` falls back to in-memory storage if persistence fails.
+- Web: 119 names. Flutter: 123 names. **115 shared.**
+- **Web-only (4):** `click`, `dead_click`, `page_view`, `rage_click` — DOM events
+  filtered out of the mobile catalog. (Flutter still emits `page_view` as an
+  untyped event via the route observer.)
+- **Flutter-only (8):** `app_open`, `app_close`, `app_backgrounded`,
+  `app_foregrounded`, `app_install`, `app_update`, `app_crashed`, `screen_view` —
+  mobile lifecycle events filtered out of the web catalog.
 
-**Parity status:** Complete for public API edge cases. Remaining mismatches are elsewhere in validation and transport details.
+The differences are intentional platform filtering from the shared buf source, not
+a coverage gap. Of the auto-emitted ones, Flutter fires only `app_open`/`app_close`
+(and `page_view`); the rest are available as typed methods for manual use.
 
-## Behavioral Differences
-
-1. **Queue persistence cadence.** Web debounces `localStorage` writes; Flutter persists synchronously on `push`, `lock`, `commit`, and `rollback`.
-2. **Retry backoff.** Web retries at fixed `maxWaitMs`; Flutter doubles once with `max(maxWaitMs, 1000) * 2`.
-
-## Auto Tracking
-
-### Implemented In Web
-
-The web SDK auto-tracks:
-
-- `page_view`
-- `click`
-- `scroll`
-- `form_start`
-- `form_submit`
-- `rage_click`
-- `dead_click`
-
-### Implemented In Flutter
-
-The Flutter SDK auto-tracks:
-
-- `app_open`
-- `app_close`
-- `page_view` via `PugRouteObserver`, when the host app registers that observer with `Navigator`
-
-### Not Ported To Flutter
-
-The DOM-centric trackers are intentionally not copied. Mobile UI instrumentation would be invasive and brittle without explicit host-app participation.
-
-**Parity status:** Intentional mobile divergence for DOM-centric trackers. Screen/page-view parity is implemented through route observation.
-
-## Push And Notifications
-
-### Web
-
-The web SDK exposes optional push helpers for VAPID/service-worker-based web push.
-
-### Flutter
-
-The Flutter SDK exposes provider-neutral APIs:
-
-- `PugPush.subscribe(provider, options:)`
-- `PugPush.unsubscribe(provider)`
-- `PugPush.trackNotificationOpened(data)`
-- `PugPush.trackNotificationReceived(data)`
-- `PugPush.trackNotificationDismissed(data)`
-
-The core package is provider-neutral and bundles no concrete provider. An FCM (or other) provider will be packaged as a separate add-on when notifications are introduced.
-
-**Parity status:** Mobile equivalent, and ahead in helper surface area.
-
-## Well-Known Event Catalog Drift
-
-The sibling web SDK's README lists 24 well-known events, but the current code in `../cotton-web-sdk/src/well-known-events.ts` only includes 21:
-
-- `checkout_completed` is not present in the web runtime schema map.
-- `login` is not present in the web runtime schema map.
-- `logout` is not present in the web runtime schema map.
-
-Flutter already mirrors all 24 names in `lib/src/events.dart` and `lib/src/well_known_events.dart`.
-
-**Parity status:** Flutter is ahead on mirrored event names, but still behind on runtime validation behavior.
+**Parity status:** Complete (platform-filtered).
 
 ## Wire Validation
 
-The shared proto contract carries `buf.validate` rules for field constraints and message-level CEL expressions.
-
-- The **web SDK** validates outbound requests client-side before sending.
-- The **Flutter SDK** does not currently run client-side protovalidate checks for full `Event`, `IdentifyRequest`, or `SubscribeRequest` payloads because `protovalidate` does not currently support Dart.
-- Flutter also does not currently enforce the mirrored well-known event schemas at `track()` time, including the 21 names the web SDK currently validates.
-
-Consequence: malformed payloads are rejected server-side rather than failing fast in the SDK.
+The shared proto contract carries `buf.validate` rules. The web SDK runs
+client-side protovalidate before sending; the Flutter SDK does not, because
+`protovalidate` has no Dart support. Malformed payloads are rejected server-side
+rather than failing fast in the SDK.
 
 **Parity status:** Accepted divergence.
 
 ## Where Flutter Exceeds The Web SDK
 
-- Sampling is actually enforced.
-- Logging, storage, transport, clock, ID generation, and link capture are injectable.
-- `SafePugStorage` provides first-class persistence fallback.
-- Push is provider-neutral in core.
-- Flutter exposes received/clicked/dismissed notification helpers.
-- Flutter has richer device/app/network auto-properties.
-- Flutter exposes explicit `Pug.flush()`.
+- Compile-time typed event props and required-field enforcement via `Pug.track.*`.
+- Per-event sampling is actually enforced (web clamps but has no sampler).
+- Logging, storage, transport, clock, ID generation, and link capture are injectable; `SafePugStorage`/`SafePugLogger` provide crash-safe fallbacks.
+- Richer device/app/network auto-properties and extra campaign click IDs.
+- received/clicked/dismissed notification helpers (web has clicked only).
+- Explicit `Pug.flush()`.
 
 ## Web-Only Features With No Mobile Analogue
 
-Correctly not implemented in Flutter:
-
-- multi-tab coordination
-- `navigator.sendBeacon`
-- high-entropy UA client hints
-- service-worker registration
-- `history.pushState` / `replaceState` patching
+Correctly not implemented in Flutter: multi-tab coordination, `navigator.sendBeacon`,
+high-entropy UA client hints, service-worker registration, and
+`history.pushState`/`replaceState` patching.
 
 ## Remaining Gaps
 
-Severity: **High** = analytics correctness/coverage, **Medium** = behavior or DX mismatch, **Low** = language/platform limitation.
+Severity: **High** = analytics correctness/coverage, **Medium** = behavior/DX
+mismatch, **Low** = language/platform limitation.
 
 | # | Gap | Web | Flutter status | Severity |
-|---|---|---|---|---|
-| 1 | Screen/page-view auto-tracking | `page_view` auto-emitted on init + history nav | `page_view` auto-emitted via `NavigatorObserver` when `autoPageViews: true` | Closed (High) |
-| 2 | Screen/route context on events | `$url`, `$referrer`, `$pageTitle` auto-properties | `url` and `referrer` are attached to `page_view` events only | Low-Medium |
-| 3 | Install referrer / deferred attribution | n/a | Link-open UTM is captured; install-referrer / deferred deep-link attribution is not | Low-Medium |
-| 4 | Compile-time typed event props | `WellKnownEventPropsMap` + overloaded `TrackFn` | Constants only; no compile-time prop typing | Low |
-| 5 | DOM interaction auto-trackers | Installed by `autoTrack` | Schemas exist, no trackers | Low |
-| 6 | Hard delivery guarantee on app kill | `navigator.sendBeacon` on `pagehide` | Best-effort `flushAll()` only | Low |
-| 7 | Package-level FCM optionality | Push is tree-shakeable and optional | Provider-neutral push API; no provider bundled | Closed (Low-Medium) |
-## Compatibility Notes
+| --- | --- | --- | --- | --- |
+| 1 | Screen/route context on events | `$url`/`$referrer`/`$pageTitle` on every event | `url`/`referrer` on `page_view` only; no current-route auto-prop | Low-Medium |
+| 2 | URL/PII sanitizer hook | `sanitizeUrl` option, fails closed | None (Flutter emits route names, not URLs) | Low |
+| 3 | Client-side wire validation | protovalidate before send | None (no Dart support) | Low |
+| 4 | Schema coercion on untyped well-known track | `track()` coerces known fields by schema | Untyped path is loose; use typed `Pug.track.*` for correct types | Low |
+| 5 | DOM interaction auto-trackers | click/scroll/form/rage/dead click | No DOM; intentionally omitted | Low (platform) |
+| 6 | Install referrer / deferred attribution | n/a | Link-open UTM captured; install-referrer not | Low-Medium |
+| 7 | Hard delivery guarantee on app kill | `sendBeacon` on `pagehide` | Best-effort `flushAll()` | Low (platform) |
 
-The Flutter SDK currently supports:
+Closed since the previous revision: tracking consent, the production endpoint
+default, compile-time typed event props, and auto page-view tracking.
+
+## Compatibility Notes
 
 - Dart `>=3.7.0 <4.0.0`
 - Flutter `>=3.29.0`
@@ -312,13 +219,18 @@ The Flutter SDK currently supports:
 
 When changing parity-sensitive behavior:
 
-- Update this document.
-- Update `TODO.md` if a gap is closed or a new gap is accepted.
-- Add tests in `test/pug_sdk_test.dart` for shared semantics or mobile substitutions.
+- Update this document and `TODO.md` if a gap is closed or accepted.
+- Add tests in `test/` for shared semantics or mobile substitutions.
 - Prefer injected fakes for platform features.
 
 ## Source Of Evidence
 
-- **Flutter SDK** — audited against `lib/src/*.dart`, `lib/pug_sdk.dart`, `proto/**`, and `test/pug_sdk_test.dart` at commit `51857f1`. Generated code under `lib/src/gen/` was excluded.
-- **Web SDK** — spot-checked against `../cotton-web-sdk/src/*.ts` at commit `9ebd5c2`, including `pug.ts`, `track.ts`, `well-known-events.ts`, `session.ts`, and `push.ts`.
-- **Shared backend contract** — both SDKs target `sdk.events.v1.EventsService/BatchCreate`, `sdk.profiles.v1.ProfilesSDKService/Identify`, and `sdk.devices.v1.DevicesService/Subscribe`, with `buf.validate` rules carried in `proto/**`.
+- **Flutter SDK** — audited against `lib/src/*.dart`, `lib/pug_sdk.dart`, and
+  `test/` on the current branch. Generated code under `lib/src/gen/` was excluded.
+- **Web SDK** — audited against `../sdk-web/src/*.ts`, including `pug.ts`,
+  `track.ts`, `tracking-consent.ts`, `session.ts`, `push.ts`, `parsers.ts`, and
+  `well-known-events.generated.ts`.
+- **Method** — event-name and auto-property sets were extracted from both
+  codebases and diffed directly; semantic claims were checked against source.
+- **Shared backend contract** — both SDKs target `BatchCreate`, `Identify`, and
+  `Subscribe` with `buf.validate` rules carried in `proto/**`.
