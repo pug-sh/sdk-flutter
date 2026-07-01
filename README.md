@@ -27,9 +27,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  pug_sdk:
-    git:
-      url: git@github.com:pug-sh/sdk-flutter.git
+  pug_sdk: ^0.0.1
 
 # Required for now: connectrpc 1.0.0 caps protobuf at `<5.0.0`, but this SDK's
 # generated code needs the 6.x runtime. Add this override to your app so
@@ -431,3 +429,7 @@ make test
 ```
 
 The SDK keeps source protos in `proto/` and generated Dart protobuf message classes in `lib/src/gen/`.
+
+## License
+
+Licensed under the MIT License. See [LICENSE](LICENSE).
