@@ -60,18 +60,21 @@ void main() {
       'page_view',
     ]);
     final pageView = client.queue.peekUnlocked().single;
-    expect(pageView.customProperties['url']?.value, '/home');
-    expect(pageView.customProperties.containsKey('referrer'), isFalse);
+    // Route context rides on $url/$referrer auto-properties (matching the web
+    // SDK); page_view no longer carries explicit url/referrer custom props.
+    expect(pageView.autoProperties[r'$url']?.value, '/home');
+    expect(pageView.autoProperties.containsKey(r'$referrer'), isFalse);
+    expect(pageView.customProperties.containsKey('url'), isFalse);
 
     PugRouteObserver.onRouteChanged?.call('/about', '/home');
 
     expect(client.queue.peekUnlocked().length, 2);
     expect(
-      client.queue.peekUnlocked().last.customProperties['url']?.value,
+      client.queue.peekUnlocked().last.autoProperties[r'$url']?.value,
       '/about',
     );
     expect(
-      client.queue.peekUnlocked().last.customProperties['referrer']?.value,
+      client.queue.peekUnlocked().last.autoProperties[r'$referrer']?.value,
       '/home',
     );
   });
@@ -84,6 +87,32 @@ void main() {
     PugRouteObserver.onRouteChanged?.call('/home', null);
 
     expect(client.queue.peekUnlocked(), isEmpty);
+  });
+
+  test(r'$url/$referrer ride on all events, not just page_view', () {
+    final client = testClient(autoPageViews: true);
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    addTearDown(() => PugRouteObserver.onRouteChanged = null);
+
+    client.notifyRouteChanged('/home', null);
+    client.notifyRouteChanged('/cart', '/home');
+    client.track('checkout_started');
+
+    final event = client.queue.peekUnlocked().last;
+    expect(event.kind, 'checkout_started');
+    expect(event.autoProperties[r'$url']?.value, '/cart');
+    expect(event.autoProperties[r'$referrer']?.value, '/home');
+  });
+
+  test(r'$url is attached even when auto page views are disabled', () {
+    final client = testClient(autoPageViews: false);
+    client.notifyRouteChanged('/home', null);
+    client.track('custom');
+
+    final events = client.queue.peekUnlocked();
+    // No page_view event, but the current route still stamps $url.
+    expect(events.map((event) => event.kind), ['custom']);
+    expect(events.single.autoProperties[r'$url']?.value, '/home');
   });
 
   test(
@@ -157,8 +186,8 @@ void main() {
 
     final events = client.queue.peekUnlocked();
     expect(events.map((event) => event.kind), everyElement('page_view'));
-    expect(events.last.customProperties['url']?.value, '/profile');
-    expect(events.last.customProperties['referrer']?.value, '/home');
+    expect(events.last.autoProperties[r'$url']?.value, '/profile');
+    expect(events.last.autoProperties[r'$referrer']?.value, '/home');
   });
 
   test('notification received and dismissed are sent immediately', () async {

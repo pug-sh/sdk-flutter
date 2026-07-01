@@ -44,7 +44,7 @@ make check        # protos + format + analyze + test
 
 `PugClient` in `lib/src/runtime.dart` owns transport, queue, storage, session/profile state, sampling, flush scheduling, and Flutter lifecycle observation. `track()` builds an `Event`, queues or sends it immediately, and catches all failures.
 
-Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle changes emit `app_open` and `app_close`. When `autoPageViews` is enabled (default), route changes emit `page_view` events with `url` and `referrer` properties; host apps must add `PugRouteObserver()` to their Navigator's `navigatorObservers` to enable this feature. `Pug.init(...)` binds `PugRouteObserver.onRouteChanged` to the active client.
+Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle changes emit `app_open` and `app_close`. When `autoPageViews` is enabled (default), route changes emit `page_view` events; host apps must add `PugRouteObserver()` to their Navigator's `navigatorObservers` to enable this feature. `Pug.init(...)` binds `PugRouteObserver.onRouteChanged` to the active client. Route changes update the current/previous route, attached to every event as the `$url`/`$referrer` auto-properties (matching the web SDK). This route state is tracked whenever the observer reports a change — even when `autoPageViews` is disabled — and `page_view` itself carries no explicit `url`/`referrer` props, relying on the auto-properties instead.
 
 Campaign capture is enabled by default through `PugOptions.autoCaptureCampaigns`. On start, `PugClient` reads the initial app/deep link and listens for later links through `PugLinkProvider`/`AppLinksPugLinkProvider`; host apps must still configure Android App Links, iOS Universal Links, or custom URL schemes.
 
@@ -80,7 +80,7 @@ Do not change this behavior casually; it prevents duplicate locks and avoids dro
 
 ### Transport
 
-`ConnectPugTransport` (in `lib/src/connect_transport.dart`) sends binary protobuf payloads over Connect-compatible HTTP endpoints. It sets `x-api-key`; the `connectrpc` client adds `connect-protocol-version: 1`. The default endpoint is `https://polru.pug.sh` (matching the web SDK); override it via `PugOptions.endpoint`. Unknown/unwrapped transport errors (e.g. `SocketException`) are treated as transient so the batch is retried, not dropped.
+`ConnectPugTransport` (in `lib/src/connect_transport.dart`) sends binary protobuf payloads over Connect-compatible HTTP endpoints. It sets `x-api-key`; the `connectrpc` client adds `connect-protocol-version: 1`. The default endpoint is `https://api.pug.sh` (matching the web SDK); override it via `PugOptions.endpoint`. Unknown/unwrapped transport errors (e.g. `SocketException`) are treated as transient so the batch is retried, not dropped.
 
 RPC paths:
 
@@ -186,6 +186,6 @@ Flutter/mobile-specific parity:
 Remaining gaps:
 
 - No concrete push provider ships with the SDK. The push API is provider-neutral and the notification tracking helpers are implemented; an FCM (or other) token provider can be packaged as a separate add-on.
-- No browser-style auto trackers for click, scroll, forms, rage click, dead click, page URL/referrer/title, or UA client hints. UTM-style campaign capture is implemented from app/deep links, but this SDK does not capture install referrer/deferred attribution automatically.
+- No browser-style auto trackers for click, scroll, forms, rage click, dead click, page title, or UA client hints. Page `$url`/`$referrer` are attached to every event from `PugRouteObserver` route changes. UTM-style campaign capture is implemented from app/deep links, but this SDK does not capture install referrer/deferred attribution automatically.
 
 Keep `TODO.md` synchronized when closing or adding parity items.

@@ -6,7 +6,7 @@ import 'tracking_consent.dart';
 class PugOptions {
   const PugOptions({
     required this.apiKey,
-    this.endpoint = 'https://polru.pug.sh',
+    this.endpoint = 'https://api.pug.sh',
     this.samplingRate = 1.0,
     this.batch = const BatchConfig(),
     this.session = const SessionConfig(),
