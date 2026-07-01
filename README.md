@@ -49,7 +49,6 @@ Future<void> configurePug() async {
     'project-id',
     const PugOptions(
       apiKey: 'pug_api_key',
-      endpoint: 'https://api.example.com',
     ),
   );
 }
@@ -62,8 +61,6 @@ await Pug.init(
   'project-id',
   PugOptions(
     apiKey: 'pug_api_key',
-    endpoint: 'https://api.example.com',
-    samplingRate: 1.0,
     autoTrack: true,
     batch: const BatchConfig(
       maxSize: 10,
@@ -79,7 +76,7 @@ await Pug.init(
 );
 ```
 
-`endpoint` is optional and defaults to `https://polru.pug.sh`; set it only to point at a different backend (the examples above use a placeholder).
+`endpoint` is optional and defaults to `https://api.pug.sh`; set it only to point at a different backend.
 
 `Pug.init(...)` uses shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type by default. To opt out of persistence, provide `storage: MemoryPugStorage()` or another custom `PugStorage`.
 
@@ -103,7 +100,7 @@ MaterialApp(
 )
 ```
 
-Each `page_view` event includes `url` (the route name) and `referrer` (the previous route).
+After a route change, every event carries `$url` (the current route) and `$referrer` (the previous route) as auto-properties — matching the web SDK — so route context is not limited to `page_view` events. Route state updates whenever the observer reports a change, even if `autoPageViews` is disabled.
 
 Campaign capture is enabled by default. When the app receives an app link or
 deep link containing UTM-style query parameters, Pug stores the latest campaign

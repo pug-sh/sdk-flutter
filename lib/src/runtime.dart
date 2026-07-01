@@ -98,21 +98,19 @@ class PugClient with WidgetsBindingObserver {
   }
 
   void notifyRouteChanged(String? url, String? referrer) {
-    if (!_options.autoPageViews || _disposed) {
-      return;
-    }
-    if (url == _currentRoute) {
+    if (_disposed || url == _currentRoute) {
       return;
     }
     _previousRoute = _currentRoute;
     _currentRoute = url;
-    track(
-      'page_view',
-      props: {
-        if (url != null) 'url': url,
-        if (_previousRoute != null) 'referrer': _previousRoute,
-      },
-    );
+    // Route state feeds the `$url`/`$referrer` auto-properties attached to
+    // every event (matching the web SDK), so it is tracked even when auto page
+    // views are disabled. Only the `page_view` event itself is gated by
+    // `autoPageViews`; like the web SDK it carries no explicit url/referrer
+    // props and relies on the auto-properties instead.
+    if (_options.autoPageViews) {
+      track('page_view');
+    }
   }
 
   final String projectId;
@@ -521,9 +519,13 @@ class PugClient with WidgetsBindingObserver {
     if (customProperties == null) {
       return null;
     }
+    final currentRoute = _currentRoute;
+    final previousRoute = _previousRoute;
     final autoProperties = mapper.mapProperties({
       r'$projectId': projectId,
       r'$sdkVersion': pugSdkVersion,
+      if (currentRoute != null) r'$url': currentRoute,
+      if (previousRoute != null) r'$referrer': previousRoute,
       ..._autoPropertyProvider.properties(),
       ..._storedCampaignProperties(),
     });

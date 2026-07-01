@@ -48,7 +48,7 @@
   - Persists to `__pug_<projectId>_consent__` when `persist` is set.
 
 - [x] Fix default endpoint.
-  - Was `http://localhost:8080`; now `https://polru.pug.sh` to match the web SDK.
+  - Was `http://localhost:8080`; now `https://api.pug.sh` to match the web SDK.
 
 ## Remaining Gaps
 
@@ -62,10 +62,14 @@
   - Per-event typed methods on `Pug.track.*` codegen'd via `make typed-track`.
   - `Pug.track('kind', props:)` retained as discouraged-but-functional escape hatch.
 
-- [ ] Decide whether route context parity should stay page-view-only or expand.
+- [x] Match web route-context parity: `$url`/`$referrer` on all events.
   - Web attaches `$url` and `$referrer` as auto-properties on all events.
-  - Flutter currently attaches `url` and `referrer` only to `page_view` events.
+  - Flutter now stamps `$url` (current route) and `$referrer` (previous route)
+    as auto-properties on every event from tracked route state; `page_view` no
+    longer carries explicit `url`/`referrer` props. Route state updates whenever
+    `PugRouteObserver` reports a change, even when `autoPageViews` is disabled.
 
-- [ ] Decide whether deferred attribution / install-referrer support is needed for mobile parity goals.
+- [x] Deferred attribution / install-referrer: intentionally deferred.
   - Flutter captures UTM-style params from app links and later deep links.
-  - It does not currently capture Android install referrer or other deferred deep-link attribution sources.
+  - Android install referrer and other deferred deep-link attribution sources
+    are out of scope for current parity goals.
