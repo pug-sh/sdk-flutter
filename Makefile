@@ -7,8 +7,18 @@ WELL_KNOWN_PROTO_FILES := google/protobuf/descriptor.proto
 
 sync-protos:
 	@command -v buf >/dev/null || (echo "buf CLI is required; install: brew install bufbuild/buf/buf" && exit 1)
-	buf export buf.build/fivebits/pug --output proto/
-	@echo "Synced buf catalog into proto/. Run 'make protos' to regenerate Dart code."
+	# Pull (export) ONLY the SDK-relevant packages from the BSR module. `buf
+	# export` is a read-only download (BSR -> proto/), never a push. `--path` is
+	# an allowlist and buf adds the transitive imports (buf/validate, google
+	# well-known types) automatically, so backend-only packages (shared/**,
+	# dashboard/**, public/**, workers/**) and the unused common/v1 filter/time
+	# protos are never re-synced. Add a `--path` here when the SDK starts using a
+	# new package.
+	buf export buf.build/fivebits/pug --output proto/ \
+		--path sdk \
+		--path common/events/v1 \
+		--path common/v1/property_value.proto
+	@echo "Synced SDK protos into proto/. Run 'make protos' to regenerate Dart code."
 
 protos:
 	@command -v protoc >/dev/null || (echo "protoc is required" && exit 1)
