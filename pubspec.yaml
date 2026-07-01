@@ -26,6 +26,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+# connectrpc 1.0.0 still caps protobuf at `<5.0.0`, but the generated code in
+# lib/src/gen requires the protobuf 6.x runtime, so force 6.x for `pub get` to
+# resolve. Do not remove this — resolution fails without it.
+# NOTE: dependency_overrides do NOT apply to apps that depend on this package;
+# consumers must add the same override until connectrpc widens its constraint.
 dependency_overrides:
   protobuf: ^6.0.0
 

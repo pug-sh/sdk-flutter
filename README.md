@@ -4,7 +4,7 @@ Flutter SDK for Pug analytics, profile identity, session tracking, batching, and
 
 The SDK sends binary protobuf payloads to the Pug backend and keeps transport, storage, and push providers injectable for tests and custom integrations.
 
-Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`.
+Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`. The generated protobuf code targets the `protobuf` 6.x runtime (`>=6.0.0 <7.0.0`).
 
 ## Features
 
@@ -30,6 +30,13 @@ dependencies:
   pug_sdk:
     git:
       url: git@github.com:pug-sh/sdk-flutter.git
+
+# Required for now: connectrpc 1.0.0 caps protobuf at `<5.0.0`, but this SDK's
+# generated code needs the 6.x runtime. Add this override to your app so
+# `pub get` resolves (dependency_overrides only apply to the root app, so the
+# SDK's own override does not carry over to your project).
+dependency_overrides:
+  protobuf: ^6.0.0
 ```
 
 ## Initialize
