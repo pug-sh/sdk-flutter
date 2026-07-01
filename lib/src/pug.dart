@@ -66,7 +66,7 @@ class Pug implements TrackContext {
 
   static Future<void> flush() => _shared.flushClient();
 
-  static void destroy() => _shared.destroyClient();
+  static Future<void> destroy() => _shared.destroyClient();
 
   /// Grants tracking consent. When consent is denied, `track()`, the typed
   /// `Pug.track.*` methods, `identify()`, and all automatic capture are
@@ -115,7 +115,7 @@ class Pug implements TrackContext {
         options: resolvedOptions,
         lifecycleBinding: WidgetsBinding.instance,
       );
-      PugClient.onRouteChanged = client.notifyRouteChanged;
+      PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
       await client.start();
       if (client.isStarted) {
         _client = client;
@@ -180,13 +180,15 @@ class Pug implements TrackContext {
     }
   }
 
-  void destroyClient() {
+  Future<void> destroyClient() async {
+    // Detach the singleton synchronously so a follow-up init() works even if the
+    // caller does not await the (now async) final flush.
+    final client = _client;
+    _client = null;
     try {
-      _client?.destroy();
+      await client?.destroy();
     } catch (error, stackTrace) {
       _fallbackLogger.error('Pug destroy failed.', error, stackTrace);
-    } finally {
-      _client = null;
     }
   }
 

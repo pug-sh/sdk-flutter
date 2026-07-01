@@ -22,13 +22,13 @@ protos:
 
 typed-track:
 	dart run tool/generate_track_namespace.dart
-	dart format lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/events.dart
+	dart format lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/well_known_event_schemas.dart
 
 check-codegen:
 	$(MAKE) typed-track
-	@if ! git diff --exit-code -- lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/events.dart > /dev/null; then \
+	@if ! git diff --exit-code -- lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/well_known_event_schemas.dart > /dev/null; then \
 		echo "Codegen drift detected. Run 'make typed-track' and commit the result."; \
-		git diff -- lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/events.dart; \
+		git diff -- lib/src/track_namespace.dart lib/src/well_known_events.dart lib/src/well_known_event_schemas.dart; \
 		exit 1; \
 	fi
 

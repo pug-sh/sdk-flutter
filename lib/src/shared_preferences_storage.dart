@@ -1,36 +1,48 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'contracts.dart';
 
 class SharedPreferencesPugStorage implements PugStorage {
-  const SharedPreferencesPugStorage(
-    this.preferences, {
-    PugLogger logger = const NoopPugLogger(),
-  }) : _logger = logger;
+  SharedPreferencesPugStorage(this.preferences, {this.logger})
+    : _writeString = preferences.setString,
+      _removeKey = preferences.remove;
 
-  static Future<SharedPreferencesPugStorage> create({
-    PugLogger logger = const NoopPugLogger(),
-  }) async {
+  /// Test seam: inject fake write/remove futures to exercise the async-failure
+  /// handling without a real platform channel.
+  @visibleForTesting
+  SharedPreferencesPugStorage.withSeams(
+    this.preferences, {
+    this.logger,
+    required Future<bool> Function(String key, String value) writeString,
+    required Future<bool> Function(String key) removeKey,
+  }) : _writeString = writeString,
+       _removeKey = removeKey;
+
+  static Future<SharedPreferencesPugStorage> create({PugLogger? logger}) async {
     final preferences = await SharedPreferences.getInstance();
     return SharedPreferencesPugStorage(preferences, logger: logger);
   }
 
   final SharedPreferences preferences;
-  final PugLogger _logger;
+  final PugLogger? logger;
+  final Future<bool> Function(String key, String value) _writeString;
+  final Future<bool> Function(String key) _removeKey;
 
   @override
   String? getString(String key) => preferences.getString(key);
 
   @override
   void remove(String key) {
-    // The write is fire-and-forget to keep the interface synchronous, but its
-    // failure must be observable — silently losing a removal (e.g. of consent)
-    // would otherwise go unnoticed until the next launch.
+    // The plugin call is async; attach a handler so a rejected future is
+    // observed and logged instead of becoming an unhandled error or a silent
+    // no-op. Log only the key plus the error for diagnosis.
     unawaited(
-      preferences.remove(key).catchError((Object error, StackTrace stack) {
-        _logger.error('Pug storage failed to remove "$key".', error, stack);
+      _removeKey(key).catchError((Object error) {
+        logger?.warn('Pug could not remove "$key" from persistent storage.');
+        logger?.debug(error.toString());
         return false;
       }),
     );
@@ -38,19 +50,10 @@ class SharedPreferencesPugStorage implements PugStorage {
 
   @override
   void setString(String key, String value) {
-    // See remove(): surface async write failures so a value that fails to
-    // persist (e.g. a tracking-consent opt-out) is logged rather than lost
-    // silently when it does not survive a restart.
     unawaited(
-      preferences.setString(key, value).catchError((
-        Object error,
-        StackTrace stack,
-      ) {
-        _logger.error(
-          'Pug storage failed to persist "$key"; it may not survive a restart.',
-          error,
-          stack,
-        );
+      _writeString(key, value).catchError((Object error) {
+        logger?.warn('Pug could not persist "$key" to persistent storage.');
+        logger?.debug(error.toString());
         return false;
       }),
     );

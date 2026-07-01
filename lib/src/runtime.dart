@@ -97,8 +97,6 @@ class PugClient with WidgetsBindingObserver {
     );
   }
 
-  static void Function(String?, String?)? onRouteChanged;
-
   void notifyRouteChanged(String? url, String? referrer) {
     if (!_options.autoPageViews || _disposed) {
       return;
@@ -399,11 +397,21 @@ class PugClient with WidgetsBindingObserver {
   }
 
   void trackNotificationReceived(Map<Object?, Object?> data) {
-    track('notification_received', props: sanitizeNotificationData(data));
+    // Notification callbacks often fire while backgrounded; send immediately so
+    // the event is not stranded in the queue if the OS suspends the process.
+    track(
+      'notification_received',
+      props: sanitizeNotificationData(data),
+      options: const TrackOptions(immediate: true),
+    );
   }
 
   void trackNotificationDismissed(Map<Object?, Object?> data) {
-    track('notification_dismissed', props: sanitizeNotificationData(data));
+    track(
+      'notification_dismissed',
+      props: sanitizeNotificationData(data),
+      options: const TrackOptions(immediate: true),
+    );
   }
 
   @override
@@ -426,22 +434,57 @@ class PugClient with WidgetsBindingObserver {
     }
   }
 
-  void destroy() {
+  Future<void> destroy() async {
+    if (_disposed) {
+      return;
+    }
     _flushTimer?.cancel();
-    unawaited(flushAll());
-    _queue.dispose();
-    unawaited(_linkSubscription?.cancel());
-    _linkProvider?.dispose();
-    _lifecycleBinding?.removeObserver(this);
-    _storage.remove(_sessionKey);
-    _storage.remove(_profileKey);
-    _storage.remove(_deviceKey);
-    _storage.remove(_externalIdKey);
-    _storage.remove(_campaignKey);
-    _storage.remove(_queueKey);
-    _currentRoute = null;
-    _previousRoute = null;
-    _disposed = true;
+    try {
+      // Best-effort final flush so queued events get a real send attempt before
+      // the storage purge below, rather than racing it.
+      await flushAll();
+    } catch (error, stackTrace) {
+      _options.logger.error(
+        'Pug final flush during destroy failed.',
+        error,
+        stackTrace,
+      );
+    } finally {
+      // Teardown must run even if the flush above throws, or the client would
+      // leak its lifecycle observer, link subscription, and timers. Cancel the
+      // timer again in case the final flush rescheduled one on a transient
+      // failure.
+      _flushTimer?.cancel();
+      // Surface undelivered events so the loss is loud, not silent: the final
+      // flush above already logged a misleading "will be retried" on a
+      // transient failure, but the queue is about to be purged below.
+      final undelivered = _queue.size;
+      if (undelivered > 0) {
+        _options.logger.warn(
+          'Pug.destroy discarded $undelivered undelivered event(s) that could '
+          'not be flushed.',
+        );
+      }
+      _queue.dispose();
+      unawaited(_linkSubscription?.cancel());
+      _linkProvider?.dispose();
+      _lifecycleBinding?.removeObserver(this);
+      // Only clear the shared route hook if it still points at this client; a
+      // follow-up init() may have already rebound it to a new client, since
+      // destroy() detaches the singleton synchronously and need not be awaited.
+      if (PugRouteObserver.onRouteChanged == notifyRouteChanged) {
+        PugRouteObserver.onRouteChanged = null;
+      }
+      _storage.remove(_sessionKey);
+      _storage.remove(_profileKey);
+      _storage.remove(_deviceKey);
+      _storage.remove(_externalIdKey);
+      _storage.remove(_campaignKey);
+      _storage.remove(_queueKey);
+      _currentRoute = null;
+      _previousRoute = null;
+      _disposed = true;
+    }
   }
 
   Future<void> _sendImmediateOrQueue(Event event) async {
