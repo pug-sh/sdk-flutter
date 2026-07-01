@@ -1,0 +1,99 @@
+name: CI
+
+# Runs on every pull request targeting main, and on every push to main
+# (i.e. after a PR is merged). Keeps the barrel green: formatting, typed-track
+# codegen drift, static analysis, and the test suite.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel superseded runs for the same ref (e.g. new pushes to an open PR) so we
+# don't waste CI minutes on stale commits. Runs on main are never cancelled.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  format-and-codegen:
+    name: Format & codegen drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # dart format does not honour analysis_options excludes, so scope it to
+      # the directories we hand-maintain plus generated code (which is already
+      # dart-formatted at generation time).
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed lib test tool
+
+      # Re-runs the pure-Dart typed-track generator against the proto sources
+      # and fails if the committed output is stale. Catches "edited a .proto but
+      # forgot to regenerate". Does not require protoc/buf.
+      - name: Check typed-track codegen is in sync
+        run: make check-codegen
+
+  analyze-and-test:
+    name: Analyze & test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # Report every combination's result rather than bailing on first failure.
+      fail-fast: false
+      matrix:
+        include:
+          # Declared floor in pubspec.yaml (flutter: ">=3.29.0" / dart 3.7).
+          # Guards against accidentally relying on APIs newer than the minimum
+          # supported SDK.
+          - name: min-supported
+            flutter-version: "3.29.0"
+            channel: stable
+          # Latest stable — surfaces new analyzer lints and deprecations early.
+          - name: stable
+            flutter-version: ""
+            channel: stable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter (${{ matrix.name }})
+        uses: subosito/flutter-action@v2
+        with:
+          # Empty flutter-version falls back to the channel's latest release.
+          flutter-version: ${{ matrix.flutter-version }}
+          channel: ${{ matrix.channel }}
+          cache: true
+
+      - run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test --coverage
+
+      - name: Upload coverage
+        if: matrix.name == 'stable'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+          if-no-files-found: warn
