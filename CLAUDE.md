@@ -187,5 +187,3 @@ Remaining gaps:
 
 - No concrete push provider ships with the SDK. The push API is provider-neutral and the notification tracking helpers are implemented; an FCM (or other) token provider can be packaged as a separate add-on.
 - No browser-style auto trackers for click, scroll, forms, rage click, dead click, page title, or UA client hints. Page `$url`/`$referrer` are attached to every event from `PugRouteObserver` route changes. UTM-style campaign capture is implemented from app/deep links, but this SDK does not capture install referrer/deferred attribution automatically.
-
-Keep `TODO.md` synchronized when closing or adding parity items.

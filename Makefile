@@ -3,7 +3,7 @@ PROTO_OUT := lib/src/gen
 PROTO_FILES := $(shell find proto -type f -name '*.proto' | sort)
 WELL_KNOWN_PROTO_FILES := google/protobuf/descriptor.proto
 
-.PHONY: protos sync-protos typed-track check-codegen format analyze test check ci
+.PHONY: protos sync-protos typed-track check-codegen verify-version format analyze test check ci
 
 sync-protos:
 	@command -v buf >/dev/null || (echo "buf CLI is required; install: brew install bufbuild/buf/buf" && exit 1)
@@ -42,6 +42,18 @@ check-codegen:
 		exit 1; \
 	fi
 
+# Guards against pubspec.yaml `version:` and pugSdkVersion in
+# lib/src/version.dart drifting apart, which would ship a stale sdkVersion
+# auto-property. Bump both together on every release.
+verify-version:
+	@pubspec_ver=$$(awk '/^version:/{print $$2; exit}' pubspec.yaml); \
+	dart_ver=$$(grep -E 'const String pugSdkVersion' lib/src/version.dart | sed -E "s/.*'([^']*)'.*/\1/"); \
+	if [ "$$pubspec_ver" != "$$dart_ver" ]; then \
+		echo "Version mismatch: pubspec.yaml=$$pubspec_ver lib/src/version.dart=$$dart_ver"; \
+		echo "Update pugSdkVersion in lib/src/version.dart to match pubspec.yaml, then re-run."; \
+		exit 1; \
+	fi
+
 format:
 	dart format lib test
 
@@ -56,8 +68,8 @@ test:
 # diffs against the committed files, so it catches the case where the proto
 # sources were updated but `make typed-track` was not re-run. Run `make
 # protos` manually before commit when proto sources change.
-check: check-codegen format analyze test
+check: verify-version check-codegen format analyze test
 
 # `ci` is the strict CI target: regenerates protobufs from scratch and then
 # runs every other check. Requires `protoc` + `protoc-gen-dart` on PATH.
-ci: protos check-codegen format analyze test
+ci: protos verify-version check-codegen format analyze test
