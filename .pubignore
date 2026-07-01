@@ -1,0 +1,16 @@
+# Files excluded from the published pub.dev archive.
+# .pubignore only affects `pub publish`; it does not change git tracking.
+# Consumers get lib/ + the generated protobuf; internal docs and build tooling
+# (proto sources, codegen, Makefile, planning docs) are not shipped.
+
+# Internal / AI / planning docs
+CLAUDE.md
+
+# Build tooling and sources (generated output already lives in lib/src/gen/)
+Makefile
+proto/
+tool/
+
+# Repo automation
+.github/
+.claude/
