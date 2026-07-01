@@ -914,7 +914,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void chatMessageDeleted({
     required String conversationId,
-    required String messageId,
+    String? messageId,
     String? conversationType,
     String? reason,
     String? threadId,
@@ -928,7 +928,7 @@ class TrackNamespace {
         methodName: 'chatMessageDeleted',
         explicit: <String, Object?>{
           'conversationId': conversationId,
-          'messageId': messageId,
+          if (messageId != null) 'messageId': messageId,
           if (conversationType != null) 'conversationType': conversationType,
           if (reason != null) 'reason': reason,
           if (threadId != null) 'threadId': threadId,
@@ -946,7 +946,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void chatMessageEdited({
     required String conversationId,
-    required String messageId,
+    String? messageId,
     String? conversationType,
     String? threadId,
     Map<String, Object?> extras = const {},
@@ -959,7 +959,7 @@ class TrackNamespace {
         methodName: 'chatMessageEdited',
         explicit: <String, Object?>{
           'conversationId': conversationId,
-          'messageId': messageId,
+          if (messageId != null) 'messageId': messageId,
           if (conversationType != null) 'conversationType': conversationType,
           if (threadId != null) 'threadId': threadId,
         },
@@ -1008,7 +1008,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void chatMessagePinned({
     required String conversationId,
-    required String messageId,
+    String? messageId,
     String? conversationType,
     String? threadId,
     Map<String, Object?> extras = const {},
@@ -1021,7 +1021,7 @@ class TrackNamespace {
         methodName: 'chatMessagePinned',
         explicit: <String, Object?>{
           'conversationId': conversationId,
-          'messageId': messageId,
+          if (messageId != null) 'messageId': messageId,
           if (conversationType != null) 'conversationType': conversationType,
           if (threadId != null) 'threadId': threadId,
         },
@@ -1038,7 +1038,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void chatMessageRead({
     required String conversationId,
-    required String messageId,
+    String? messageId,
     String? conversationType,
     String? threadId,
     Map<String, Object?> extras = const {},
@@ -1051,7 +1051,7 @@ class TrackNamespace {
         methodName: 'chatMessageRead',
         explicit: <String, Object?>{
           'conversationId': conversationId,
-          'messageId': messageId,
+          if (messageId != null) 'messageId': messageId,
           if (conversationType != null) 'conversationType': conversationType,
           if (threadId != null) 'threadId': threadId,
         },
@@ -1068,7 +1068,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void chatMessageReceived({
     required String conversationId,
-    required String messageId,
+    String? messageId,
     String? conversationType,
     String? messageType,
     int? characterCount,
@@ -1085,7 +1085,7 @@ class TrackNamespace {
         methodName: 'chatMessageReceived',
         explicit: <String, Object?>{
           'conversationId': conversationId,
-          'messageId': messageId,
+          if (messageId != null) 'messageId': messageId,
           if (conversationType != null) 'conversationType': conversationType,
           if (messageType != null) 'messageType': messageType,
           if (characterCount != null) 'characterCount': characterCount,
@@ -1106,7 +1106,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void chatMessageSent({
     required String conversationId,
-    required String messageId,
+    String? messageId,
     String? conversationType,
     String? messageType,
     int? characterCount,
@@ -1123,7 +1123,7 @@ class TrackNamespace {
         methodName: 'chatMessageSent',
         explicit: <String, Object?>{
           'conversationId': conversationId,
-          'messageId': messageId,
+          if (messageId != null) 'messageId': messageId,
           if (conversationType != null) 'conversationType': conversationType,
           if (messageType != null) 'messageType': messageType,
           if (characterCount != null) 'characterCount': characterCount,
@@ -1144,7 +1144,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void chatMessageUnpinned({
     required String conversationId,
-    required String messageId,
+    String? messageId,
     String? conversationType,
     String? threadId,
     Map<String, Object?> extras = const {},
@@ -1157,7 +1157,7 @@ class TrackNamespace {
         methodName: 'chatMessageUnpinned',
         explicit: <String, Object?>{
           'conversationId': conversationId,
-          'messageId': messageId,
+          if (messageId != null) 'messageId': messageId,
           if (conversationType != null) 'conversationType': conversationType,
           if (threadId != null) 'threadId': threadId,
         },
@@ -1174,8 +1174,8 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void chatReactionAdded({
     required String conversationId,
-    required String messageId,
     required String reaction,
+    String? messageId,
     String? threadId,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
@@ -1187,8 +1187,8 @@ class TrackNamespace {
         methodName: 'chatReactionAdded',
         explicit: <String, Object?>{
           'conversationId': conversationId,
-          'messageId': messageId,
           'reaction': reaction,
+          if (messageId != null) 'messageId': messageId,
           if (threadId != null) 'threadId': threadId,
         },
         extras: extras,
@@ -1204,8 +1204,8 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void chatReactionRemoved({
     required String conversationId,
-    required String messageId,
     required String reaction,
+    String? messageId,
     String? threadId,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
@@ -1217,8 +1217,8 @@ class TrackNamespace {
         methodName: 'chatReactionRemoved',
         explicit: <String, Object?>{
           'conversationId': conversationId,
-          'messageId': messageId,
           'reaction': reaction,
+          if (messageId != null) 'messageId': messageId,
           if (threadId != null) 'threadId': threadId,
         },
         extras: extras,
