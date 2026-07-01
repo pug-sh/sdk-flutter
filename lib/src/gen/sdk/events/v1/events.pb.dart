@@ -227,6 +227,7 @@ class Event extends $pb.GeneratedMessage {
   @$pb.TagNumber(4)
   void clearDistinctId() => $_clearField(4);
 
+  /// Same character set as common.v1.EventFilter.kind (filters.proto); + requires non-empty at ingest.
   @$pb.TagNumber(5)
   $core.String get kind => $_getSZ(4);
   @$pb.TagNumber(5)
