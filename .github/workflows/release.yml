@@ -1,0 +1,122 @@
+name: Release
+
+# Cut a release by pushing a semver tag that matches pubspec.yaml, e.g.:
+#
+#   # bump `version:` in pubspec.yaml + update CHANGELOG.md, commit, then:
+#   git tag v0.0.1
+#   git push origin v0.0.1
+#
+# The job re-runs the full check suite, verifies the tag matches the pubspec
+# version, validates the package is publishable, and creates a GitHub Release.
+# Publishing to pub.dev is left disabled by default — see the commented
+# `publish` job at the bottom for how to turn it on.
+on:
+  push:
+    tags: ["v*.*.*"]
+  # Allows running the verification steps manually from the Actions tab against
+  # any branch, without creating a release.
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create GitHub Releases
+  id-token: write # OIDC token for pub.dev publishing (only used if enabled)
+
+jobs:
+  verify:
+    name: Verify release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+      - run: flutter pub get
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed lib test tool
+
+      - name: Check typed-track codegen is in sync
+        run: make check-codegen
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      # On tag builds, guarantee the tag (v1.2.3) matches pubspec `version:`.
+      - name: Verify tag matches pubspec version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(grep -E '^version:' pubspec.yaml | head -1 | awk '{print $2}')"
+          echo "tag=$tag  pubspec=$pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Tag v$tag does not match pubspec.yaml version $pkg. Bump pubspec.yaml before tagging."
+            exit 1
+          fi
+
+      # Non-fatal on warnings (missing homepage, etc.); fails only on hard
+      # packaging errors. Confirms the package can be packed for pub.dev.
+      - name: Validate package is publishable (dry run)
+        run: dart pub publish --dry-run
+
+  github-release:
+    name: GitHub Release
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Auto-generate notes from merged PRs/commits since the last tag.
+          # Swap for `body_path: CHANGELOG.md` if you prefer curated notes.
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  # ---------------------------------------------------------------------------
+  # Publish to pub.dev (disabled by default)
+  #
+  # To enable automated publishing:
+  #   1. Publish the package once manually (`dart pub publish`) so it exists
+  #      under a verified publisher on pub.dev.
+  #   2. On pub.dev: Admin > Automated publishing > enable "Publishing from
+  #      GitHub Actions", set repository `pug-sh/sdk-flutter` and tag pattern
+  #      `v{{version}}`.
+  #   3. Uncomment the job below. It uses pub.dev's OIDC trust (no secrets/token
+  #      needed; `id-token: write` above supplies the token).
+  #
+  # Publishing is irreversible — a published version cannot be overwritten.
+  # ---------------------------------------------------------------------------
+  #
+  # publish:
+  #   name: Publish to pub.dev
+  #   needs: verify
+  #   if: startsWith(github.ref, 'refs/tags/')
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 15
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: subosito/flutter-action@v2
+  #       with:
+  #         channel: stable
+  #         cache: true
+  #     - run: flutter pub get
+  #     - name: Publish
+  #       run: dart pub publish --force
