@@ -1,8 +1,8 @@
 import 'package:connectrpc/connect.dart' as connect;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pug_sdk/pug_sdk.dart';
-import 'package:pug_sdk/src/connect_transport.dart';
-import 'package:pug_sdk/src/event_queue_storage.dart';
+import 'package:pug_flutter/pug_flutter.dart';
+import 'package:pug_flutter/src/connect_transport.dart';
+import 'package:pug_flutter/src/event_queue_storage.dart';
 
 import 'test_support.dart';
 
