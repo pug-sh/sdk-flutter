@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pug_sdk/pug_sdk.dart';
+import 'package:pug_flutter/pug_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_support.dart';
