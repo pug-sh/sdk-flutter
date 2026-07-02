@@ -80,7 +80,7 @@ Do not change this behavior casually; it prevents duplicate locks and avoids dro
 
 ### Transport
 
-`ConnectPugTransport` (in `lib/src/connect_transport.dart`) sends binary protobuf payloads over Connect-compatible HTTP endpoints. It sets `x-api-key`; the `connectrpc` client adds `connect-protocol-version: 1`. The default endpoint is `https://api.pug.sh` (matching the web SDK); override it via `PugOptions.endpoint`. Unknown/unwrapped transport errors (e.g. `SocketException`) are treated as transient so the batch is retried, not dropped.
+`ConnectPugTransport` (in `lib/src/connect_transport.dart`) sends binary protobuf payloads over Connect-compatible HTTP endpoints. It sets `x-api-key`; the `connectrpc` client adds `connect-protocol-version: 1`. The default endpoint is `https://api.pugs.dev` (matching the web SDK); override it via `PugOptions.endpoint`. Unknown/unwrapped transport errors (e.g. `SocketException`) are treated as transient so the batch is retried, not dropped.
 
 RPC paths:
 

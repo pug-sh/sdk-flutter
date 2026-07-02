@@ -9,7 +9,7 @@ void main() {
 
   test('default endpoint points at production, not localhost', () {
     const options = PugOptions(apiKey: 'key');
-    expect(options.endpoint, 'https://api.pug.sh');
+    expect(options.endpoint, 'https://api.pugs.dev');
   });
 
   test(
