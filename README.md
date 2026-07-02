@@ -73,7 +73,7 @@ await Pug.init(
 );
 ```
 
-`endpoint` is optional and defaults to `https://api.pug.sh`; set it only to point at a different backend.
+`endpoint` is optional and defaults to `https://api.pugs.dev`; set it only to point at a different backend.
 
 `Pug.init(...)` uses shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type by default. To opt out of persistence, provide `storage: MemoryPugStorage()` or another custom `PugStorage`.
 
