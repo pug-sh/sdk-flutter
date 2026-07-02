@@ -26,7 +26,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  pug_sdk: ^0.0.1
+  pug_flutter: ^0.0.1
 
 # Required for now: connectrpc 1.0.0 caps protobuf at `<5.0.0`, but this SDK's
 # generated code needs the 6.x runtime. Add this override to your app so
@@ -39,7 +39,7 @@ dependency_overrides:
 ## Initialize
 
 ```dart
-import 'package:pug_sdk/pug_sdk.dart';
+import 'package:pug_flutter/pug_flutter.dart';
 
 Future<void> configurePug() async {
   await Pug.init(
