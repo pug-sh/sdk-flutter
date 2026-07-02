@@ -16,7 +16,6 @@ Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`. The generated protobuf co
 - Tracking consent gate with opt in/out and optional persistence.
 - Provider-neutral push registration.
 - Automatic campaign capture from app links and deep links.
-- Notification received, clicked, and dismissed event helpers.
 - Injectable storage, transport, clock, ID generator, logger, and push provider for tests.
 - Well-known event constants for the shared event catalog.
 - Shared-preferences-backed initialization with richer mobile auto-properties.
@@ -131,7 +130,7 @@ await Pug.init(
 
 Tracking consent gates event capture: `Pug.track(...)`, the typed
 `Pug.track.*` methods, `Pug.identify(...)`, and automatic
-lifecycle/page-view/notification events are dropped while consent is denied,
+lifecycle/page-view events are dropped while consent is denied,
 and resume once it is granted. Automatic campaign/deep-link capture is *not*
 gated — while denied it still records attribution locally, but transmits
 nothing until consent is granted.
@@ -257,11 +256,6 @@ Pug.track.purchase(
 );
 
 Pug.track.search(query: 'running shoes');
-
-Pug.track.notificationClicked(
-  campaignId: 'spring-sale',
-  extras: {'notificationType': 'promo'},
-);
 ```
 
 The untyped `Pug.track(PugEventNames.*)` path continues to work but emits a
@@ -350,11 +344,6 @@ class CustomPushProvider implements PushProvider {
 
   @override
   Future<void> deleteToken() async {}
-
-  @override
-  Map<Object?, Object?> notificationData(Object source) {
-    return source is Map<Object?, Object?> ? source : const {};
-  }
 }
 
 await PugPush.subscribe(
