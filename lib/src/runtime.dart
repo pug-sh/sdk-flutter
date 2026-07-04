@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/widgets.dart';
 
 import 'auto_properties.dart';
@@ -116,11 +117,17 @@ class PugClient with WidgetsBindingObserver {
       track('page_view');
       return;
     }
-    // Native runtimes emit screen_view — the proto marks page_view as a
-    // web-only kind ("Use screen_view for native mobile screens"). screen_view
-    // requires a non-empty screenName, so a null route (e.g. the last route
-    // being removed) updates route state without emitting an event.
-    if (url != null && url.isNotEmpty) {
+    // Navigation events are platform-limited in the proto: page_view is
+    // web-only and screen_view covers iOS/Android only. Desktop (macOS,
+    // Windows, Linux) and other native targets have no matching kind, so they
+    // emit no navigation event — the route state updated above still feeds the
+    // $url/$referrer auto-properties on later events. screen_view also requires
+    // a non-empty screenName, so a null route (e.g. the last route being
+    // removed) updates route state without emitting an event.
+    final platform = defaultTargetPlatform;
+    final emitsScreenView =
+        platform == TargetPlatform.iOS || platform == TargetPlatform.android;
+    if (emitsScreenView && url != null && url.isNotEmpty) {
       track('screen_view', props: {'screenName': url});
     }
   }
