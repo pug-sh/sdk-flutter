@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/widgets.dart';
 
 import 'auto_properties.dart';
@@ -105,12 +107,51 @@ class PugClient with WidgetsBindingObserver {
     _currentRoute = url;
     // Route state feeds the `$url`/`$referrer` auto-properties attached to
     // every event (matching the web SDK), so it is tracked even when auto page
-    // views are disabled. Only the `page_view` event itself is gated by
-    // `autoPageViews`; like the web SDK it carries no explicit url/referrer
-    // props and relies on the auto-properties instead.
-    if (_options.autoPageViews) {
-      track('page_view');
+    // views are disabled. Only the navigation event itself is gated by
+    // `autoPageViews`; it carries no explicit url/referrer props and relies on
+    // the auto-properties instead.
+    if (!_options.autoPageViews) {
+      return;
     }
+    if (kIsWeb) {
+      track('page_view');
+      return;
+    }
+    // Navigation events are platform-limited in the proto: page_view is
+    // web-only and screen_view covers iOS/Android only. Desktop (macOS,
+    // Windows, Linux) and other native targets have no matching kind, so they
+    // emit no navigation event — the route state updated above still feeds the
+    // $url/$referrer auto-properties on later events. screen_view also requires
+    // a non-empty screenName, so a null route (e.g. the last route being
+    // removed) updates route state without emitting an event.
+    final platform = defaultTargetPlatform;
+    final emitsScreenView =
+        platform == TargetPlatform.iOS || platform == TargetPlatform.android;
+    if (!emitsScreenView) {
+      _warnUnsupportedNavPlatformOnce(platform, url);
+      return;
+    }
+    if (url != null && url.isNotEmpty) {
+      track('screen_view', props: {'screenName': url});
+    }
+  }
+
+  /// Logs once, at debug level, when a real route change lands on a native
+  /// platform with no navigation event kind (desktop and other non-iOS/Android
+  /// targets), so a developer who wired [PugRouteObserver] isn't left wondering
+  /// why no navigation events ever appear. Route context still rides on the
+  /// `$url`/`$referrer` auto-properties. Stays silent on null/empty routes,
+  /// since nothing was navigated to.
+  void _warnUnsupportedNavPlatformOnce(TargetPlatform platform, String? url) {
+    if (_warnedNoNavPlatform || url == null || url.isEmpty) {
+      return;
+    }
+    _warnedNoNavPlatform = true;
+    _options.logger.debug(
+      'Pug: auto navigation events are emitted only on iOS/Android '
+      '(screen_view) and web (page_view); ${platform.name} emits none. Route '
+      'context still rides on the \$url/\$referrer auto-properties.',
+    );
   }
 
   final String projectId;
@@ -130,9 +171,9 @@ class PugClient with WidgetsBindingObserver {
   bool _disposed = false;
   bool _isForeground = false;
   bool _started = false;
-  final Random _sampling = Random();
   String? _currentRoute;
   String? _previousRoute;
+  bool _warnedNoNavPlatform = false;
 
   /// Exposed so `Pug.logger` can surface the configured logger to callers
   /// (notably `TrackNamespace`) post-init. Safe to call before `start()`.
@@ -189,9 +230,6 @@ class PugClient with WidgetsBindingObserver {
         _options.logger.debug(
           'Pug track("$kind") dropped because tracking consent is denied.',
         );
-        return;
-      }
-      if (!_sampledIn()) {
         return;
       }
       final event = _createEvent(kind, props, options.timestampMillis);
@@ -385,11 +423,9 @@ class PugClient with WidgetsBindingObserver {
   }
 
   void trackNotificationOpened(Map<Object?, Object?> data) {
-    final props = sanitizeNotificationData(data);
-    props.putIfAbsent('campaignId', () => '(unknown)');
     track(
       'notification_clicked',
-      props: props,
+      props: _notificationProps(data),
       options: const TrackOptions(immediate: true),
     );
   }
@@ -399,7 +435,7 @@ class PugClient with WidgetsBindingObserver {
     // the event is not stranded in the queue if the OS suspends the process.
     track(
       'notification_received',
-      props: sanitizeNotificationData(data),
+      props: _notificationProps(data),
       options: const TrackOptions(immediate: true),
     );
   }
@@ -407,9 +443,26 @@ class PugClient with WidgetsBindingObserver {
   void trackNotificationDismissed(Map<Object?, Object?> data) {
     track(
       'notification_dismissed',
-      props: sanitizeNotificationData(data),
+      props: _notificationProps(data),
       options: const TrackOptions(immediate: true),
     );
+  }
+
+  /// Sanitizes a notification payload and guarantees a usable `campaignId`.
+  ///
+  /// The notification_* schemas mark `campaign_id` as required (buf.validate
+  /// `required`), so an event that omits it is expected to be rejected
+  /// server-side — and a permanent rejection drops the event (see the transport
+  /// notes on permanent failures). To stay safe we always send a value: like
+  /// the web SDK, a missing, empty, or non-string `campaignId` becomes
+  /// "(unknown)".
+  Map<String, Object?> _notificationProps(Map<Object?, Object?> data) {
+    final props = sanitizeNotificationData(data);
+    final campaignId = props['campaignId'];
+    if (campaignId is! String || campaignId.isEmpty) {
+      props['campaignId'] = '(unknown)';
+    }
+    return props;
   }
 
   @override
@@ -639,16 +692,6 @@ class PugClient with WidgetsBindingObserver {
     }
   }
 
-  bool _sampledIn() {
-    if (_options.samplingRate >= 1) {
-      return true;
-    }
-    if (_options.samplingRate <= 0) {
-      return false;
-    }
-    return _sampling.nextDouble() <= _options.samplingRate;
-  }
-
   Future<void> _startCampaignCapture() async {
     if (!_options.autoCaptureCampaigns) {
       return;
@@ -723,14 +766,9 @@ class PugClient with WidgetsBindingObserver {
 
 PugOptions _normalizeOptions(PugOptions options) {
   final logger = SafePugLogger(options.logger);
-  final samplingRate = options.samplingRate.clamp(0.0, 1.0);
-  if (samplingRate != options.samplingRate) {
-    logger.warn('samplingRate must be between 0 and 1; clamping.');
-  }
   return PugOptions(
     apiKey: options.apiKey,
     endpoint: options.endpoint,
-    samplingRate: samplingRate,
     batch: BatchConfig(
       maxSize: max(options.batch.maxSize, 1),
       maxWaitMs: max(options.batch.maxWaitMs, 0),

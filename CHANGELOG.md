@@ -1,3 +1,21 @@
+## Unreleased
+
+* Route changes now emit `screen_view` (with the required `screenName`
+  property) on iOS/Android and `page_view` on web, matching the proto platform
+  annotations. Desktop (macOS/Windows/Linux) emits no navigation event; route
+  context still rides on the `$url`/`$referrer` auto-properties.
+* All notification helpers (`received`/`clicked`/`dismissed`) now default a
+  missing, empty, or non-string `campaignId` to `(unknown)`. The notification
+  schemas require a non-empty campaign_id, so received/dismissed events
+  without one were being rejected by the server.
+* `$timezone` now reports the IANA identifier (e.g. `Asia/Kolkata`) via
+  `flutter_timezone`, falling back to the platform abbreviation when
+  unavailable.
+* Removed the `$deviceName` auto-property — user-assigned device names are PII.
+* Removed the `samplingRate` option and its client-side event sampling. The web
+  SDK does not sample on the client, so this was a non-parity extension; every
+  consented event is now sent (sampling, if any, is a server-side concern).
+
 ## 0.0.1
 
 Initial release.

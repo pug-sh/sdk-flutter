@@ -42,9 +42,9 @@ make check        # protos + format + analyze + test
 
 ### Runtime
 
-`PugClient` in `lib/src/runtime.dart` owns transport, queue, storage, session/profile state, sampling, flush scheduling, and Flutter lifecycle observation. `track()` builds an `Event`, queues or sends it immediately, and catches all failures.
+`PugClient` in `lib/src/runtime.dart` owns transport, queue, storage, session/profile state, flush scheduling, and Flutter lifecycle observation. `track()` builds an `Event`, queues or sends it immediately, and catches all failures.
 
-Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle changes emit `app_open` and `app_close`. When `autoPageViews` is enabled (default), route changes emit `page_view` events; host apps must add `PugRouteObserver()` to their Navigator's `navigatorObservers` to enable this feature. `Pug.init(...)` binds `PugRouteObserver.onRouteChanged` to the active client. Route changes update the current/previous route, attached to every event as the `$url`/`$referrer` auto-properties (matching the web SDK). This route state is tracked whenever the observer reports a change — even when `autoPageViews` is disabled — and `page_view` itself carries no explicit `url`/`referrer` props, relying on the auto-properties instead.
+Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle changes emit `app_open` and `app_close`. When `autoPageViews` is enabled (default), route changes emit navigation events — `screen_view` (with the required `screenName` property) on iOS/Android, `page_view` on web (`kIsWeb`), matching the proto platform annotations ("use screen_view for native mobile screens"). Desktop (macOS/Windows/Linux) and other native targets emit no navigation event, because the schema restricts `screen_view` to iOS/Android and `page_view` to web; route state is still updated for the `$url`/`$referrer` auto-properties. Host apps must add `PugRouteObserver()` to their Navigator's `navigatorObservers` to enable this feature. `Pug.init(...)` binds `PugRouteObserver.onRouteChanged` to the active client. Route changes update the current/previous route, attached to every event as the `$url`/`$referrer` auto-properties (matching the web SDK). This route state is tracked whenever the observer reports a change — even when `autoPageViews` is disabled — and the navigation event carries no explicit `url`/`referrer` props, relying on the auto-properties instead. A null route (e.g. the last route being removed) updates route state without emitting a native navigation event, since `screen_view` requires a non-empty name. Likewise, on desktop and other non-iOS/Android native targets the route state advances but no navigation event is emitted.
 
 Campaign capture is enabled by default through `PugOptions.autoCaptureCampaigns`. On start, `PugClient` reads the initial app/deep link and listens for later links through `PugLinkProvider`/`AppLinksPugLinkProvider`; host apps must still configure Android App Links, iOS Universal Links, or custom URL schemes.
 
@@ -94,7 +94,7 @@ Permanent HTTP failures drop events; transient failures roll back and retry late
 
 `PugAutoPropertyProvider` supplies auto-properties synchronously during event creation. `SystemPugAutoPropertyProvider.create(...)` preloads async platform metadata for `Pug.init(...)` unless callers supply one.
 
-Auto properties include `$projectId`, `$sdkVersion`, `$platform`, `$os`, `$osVersion`, `$locale`, `$timezone`, screen dimensions, app version/build/package where available, device manufacturer/model where available, and a coarse connectivity category (`$networkType`: `wifi`, `mobile`, `ethernet`, `vpn`, `bluetooth`, `other`, `none`, or `unknown`) where available.
+Auto properties include `$projectId`, `$sdkVersion`, `$platform`, `$os`, `$osVersion`, `$locale`, `$timezone` (the IANA identifier via `flutter_timezone`, preloaded in `create(...)`; falls back to the platform abbreviation when unavailable), screen dimensions, app version/build/package where available, device manufacturer/model where available, and a coarse connectivity category (`$networkType`: `wifi`, `mobile`, `ethernet`, `vpn`, `bluetooth`, `other`, `none`, or `unknown`) where available. `$deviceName` is deliberately not sent — user-assigned device names are PII.
 
 Campaign auto-properties are merged from the latest captured app/deep link: `$utmSource`, `$utmMedium`, `$utmCampaign`, `$utmTerm`, `$utmContent`, `$gclid`, `$fbclid`, `$msclkid`, and `$ttclid`. They are stored under the project-scoped campaign key and attached to later events.
 
@@ -129,7 +129,7 @@ Anonymous profile IDs are prefixed with `anon-`. The first successful `identify(
 
 ### Tracking Consent
 
-`TrackingConsentController` in `lib/src/tracking_consent.dart` holds consent state and gates capture, matching the web SDK's consent model. When consent is `denied`, `track()` (typed and untyped), `identify()`, and automatic capture (lifecycle, page views, notifications) are dropped; `identify()` returns normally without hitting transport. The gate lives in `PugClient.track()`/`identify()` and is checked before sampling. Automatic campaign/deep-link capture is *not* gated: while denied, campaign parameters are still written to `__pug_<projectId>_campaign__` and attached to later events, but nothing is transmitted until consent is granted (event creation is gated). Consent activity — denied-drop debug logs, an invalid persisted value, or a `SafePugStorage` persistence failure — is reported only through the configured `PugLogger`; the default `NoopPugLogger` discards debug/warn/error, so configure a logger to observe consent behavior.
+`TrackingConsentController` in `lib/src/tracking_consent.dart` holds consent state and gates capture, matching the web SDK's consent model. When consent is `denied`, `track()` (typed and untyped), `identify()`, and automatic capture (lifecycle, page views, notifications) are dropped; `identify()` returns normally without hitting transport. The gate lives in `PugClient.track()`/`identify()` and is checked before event creation. Automatic campaign/deep-link capture is *not* gated: while denied, campaign parameters are still written to `__pug_<projectId>_campaign__` and attached to later events, but nothing is transmitted until consent is granted (event creation is gated). Consent activity — denied-drop debug logs, an invalid persisted value, or a `SafePugStorage` persistence failure — is reported only through the configured `PugLogger`; the default `NoopPugLogger` discards debug/warn/error, so configure a logger to observe consent behavior.
 
 Consent is configured through `PugOptions.trackingConsent` (`TrackingConsentConfig`): `defaultConsent` (default `granted`) seeds first-run state, and `persist` (default `false`) mirrors opt in/out to the project-scoped key `__pug_<projectId>_consent__` and restores it on the next `init()`. The runtime exposes `optInTracking()`, `optOutTracking()`, `trackingConsent`, and `isTrackingEnabled`, surfaced publicly on `Pug`. Consent is independent of `dryRun`, which suppresses delivery without changing consent. `destroy()` does not clear persisted consent, so a user's opt-out survives teardown.
 
@@ -143,7 +143,7 @@ Notification helper events:
 - `notification_clicked`
 - `notification_dismissed`
 
-Notification payload sanitization keeps only flat strings, booleans, finite numbers, and timestamps. `notification_clicked` defaults missing `campaignId` to `(unknown)`.
+Notification payload sanitization keeps only flat strings, booleans, finite numbers, and timestamps. All three notification helpers default a missing, empty, or non-string `campaignId` to `(unknown)` — the notification_* schemas mark `campaign_id` as required (buf.validate `required`), so an event without a usable value is expected to be rejected server-side as a permanent (silently dropped) failure.
 
 ## Design Invariants
 
@@ -172,7 +172,7 @@ Implemented parity:
 - Notification received/clicked/dismissed helpers.
 - Fuller mobile auto-properties through `PugAutoPropertyProvider`.
 - Explicit `Pug.flush()` and background/destroy best-effort flushes.
-- Dry run, sampling rate clamping, custom logger, injectable storage/transport/clock/ID generator.
+- Dry run, custom logger, injectable storage/transport/clock/ID generator.
 - Typed track API.
   - Per-event typed methods on `Pug.track.*` codegen'd from the buf catalog.
   - Untyped `Pug.track(kind, props:)` retained as the escape hatch with a debug-only hint on well-known kinds.

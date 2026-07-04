@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter/pug_flutter.dart';
@@ -49,26 +51,34 @@ void main() {
     ]);
   });
 
-  test('auto page views tracks page_view on route changes', () async {
+  test('auto page views tracks screen_view on native route changes', () async {
     final transport = FakeTransport();
     final client = testClient(transport: transport, autoPageViews: true);
 
     PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
     PugRouteObserver.onRouteChanged?.call('/home', null);
 
+    // Tests run on the host VM (kIsWeb false), so the native kind is emitted;
+    // page_view is reserved for web builds.
     expect(client.queue.peekUnlocked().map((event) => event.kind), [
-      'page_view',
+      'screen_view',
     ]);
-    final pageView = client.queue.peekUnlocked().single;
-    // Route context rides on $url/$referrer auto-properties (matching the web
-    // SDK); page_view no longer carries explicit url/referrer custom props.
-    expect(pageView.autoProperties[r'$url']?.value, '/home');
-    expect(pageView.autoProperties.containsKey(r'$referrer'), isFalse);
-    expect(pageView.customProperties.containsKey('url'), isFalse);
+    final screenView = client.queue.peekUnlocked().single;
+    // screen_view carries the required screenName; route context rides on
+    // $url/$referrer auto-properties (matching the web SDK), never on
+    // url/referrer custom props.
+    expect(screenView.customProperties['screenName']?.value, '/home');
+    expect(screenView.autoProperties[r'$url']?.value, '/home');
+    expect(screenView.autoProperties.containsKey(r'$referrer'), isFalse);
+    expect(screenView.customProperties.containsKey('url'), isFalse);
 
     PugRouteObserver.onRouteChanged?.call('/about', '/home');
 
     expect(client.queue.peekUnlocked().length, 2);
+    expect(
+      client.queue.peekUnlocked().last.customProperties['screenName']?.value,
+      '/about',
+    );
     expect(
       client.queue.peekUnlocked().last.autoProperties[r'$url']?.value,
       '/about',
@@ -79,7 +89,72 @@ void main() {
     );
   });
 
-  test('auto page views disabled does not track page_view', () async {
+  test('a null route updates state without emitting screen_view', () async {
+    final client = testClient(autoPageViews: true);
+
+    client.notifyRouteChanged('/home', null);
+    client.notifyRouteChanged(null, '/home');
+
+    // screen_view requires a non-empty screenName, so the null route emits
+    // nothing — but route state moved on, so later events carry no $url.
+    expect(client.queue.peekUnlocked().map((event) => event.kind), [
+      'screen_view',
+    ]);
+    client.track('custom');
+    final custom = client.queue.peekUnlocked().last;
+    expect(custom.autoProperties.containsKey(r'$url'), isFalse);
+    expect(custom.autoProperties[r'$referrer']?.value, '/home');
+  });
+
+  test('an empty-string route updates state without emitting screen_view', () {
+    final client = testClient(autoPageViews: true);
+
+    // screen_view carries a required screen_name (proto), so an empty route
+    // name must emit nothing — otherwise the server permanently rejects the
+    // event and it is silently dropped. Guards the `url.isNotEmpty` check.
+    client.notifyRouteChanged('', null);
+
+    expect(client.queue.peekUnlocked(), isEmpty);
+  });
+
+  test('desktop route changes update state without emitting a navigation '
+      'event', () async {
+    // screen_view is limited to iOS/Android and page_view is web-only, so a
+    // desktop route change emits no navigation event — but route state still
+    // moves on for the $url/$referrer auto-properties on later events.
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final client = testClient(autoPageViews: true);
+
+    client.notifyRouteChanged('/home', null);
+    expect(client.queue.peekUnlocked(), isEmpty);
+
+    client.track('custom');
+    final custom = client.queue.peekUnlocked().single;
+    expect(custom.kind, 'custom');
+    expect(custom.autoProperties[r'$url']?.value, '/home');
+  });
+
+  test('an unsupported native platform logs once and emits no event', () {
+    final logger = CapturingLogger();
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final client = testClient(logger: logger, autoPageViews: true);
+
+    client.notifyRouteChanged('/home', null);
+    client.notifyRouteChanged('/settings', '/home');
+
+    // Desktop has no navigation kind in the schema, so nothing is emitted — but
+    // we log once (not per route change) so a developer who wired the observer
+    // isn't left wondering why no navigation events ever appear.
+    expect(client.queue.peekUnlocked(), isEmpty);
+    expect(
+      logger.debugs.where((message) => message.contains('navigation')),
+      hasLength(1),
+    );
+  });
+
+  test('auto page views disabled does not track navigation events', () async {
     final transport = FakeTransport();
     final client = testClient(transport: transport, autoPageViews: false);
 
@@ -175,7 +250,7 @@ void main() {
     },
   );
 
-  test('route observer emits page_view events through the wired client', () {
+  test('route observer emits screen_view events through the wired client', () {
     final client = testClient(autoPageViews: true);
     PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
     addTearDown(() => PugRouteObserver.onRouteChanged = null);
@@ -185,7 +260,8 @@ void main() {
     observer.didPush(NamedRoute('/profile'), NamedRoute('/home'));
 
     final events = client.queue.peekUnlocked();
-    expect(events.map((event) => event.kind), everyElement('page_view'));
+    expect(events.map((event) => event.kind), everyElement('screen_view'));
+    expect(events.last.customProperties['screenName']?.value, '/profile');
     expect(events.last.autoProperties[r'$url']?.value, '/profile');
     expect(events.last.autoProperties[r'$referrer']?.value, '/home');
   });
@@ -202,6 +278,32 @@ void main() {
       transport.sent.map((event) => event.kind),
       containsAll(['notification_received', 'notification_dismissed']),
     );
+    expect(
+      transport.sent.map(
+        (event) => event.customProperties['campaignId']?.value,
+      ),
+      everyElement('c1'),
+    );
     expect(client.queue.peekUnlocked(), isEmpty);
+  });
+
+  test('all notification helpers default an unusable campaignId', () async {
+    final transport = FakeTransport();
+    final client = testClient(transport: transport);
+
+    // The notification_* schemas require a non-empty campaign_id; without the
+    // fallback the server rejects these events (a permanent, silent drop).
+    client.trackNotificationReceived({'ok': 'yes'}); // missing
+    client.trackNotificationDismissed({'campaignId': ''}); // empty
+    client.trackNotificationOpened({'campaignId': 7}); // non-string
+    await Future<void>.delayed(Duration.zero);
+
+    expect(transport.sent, hasLength(3));
+    expect(
+      transport.sent.map(
+        (event) => event.customProperties['campaignId']?.value,
+      ),
+      everyElement('(unknown)'),
+    );
   });
 }
