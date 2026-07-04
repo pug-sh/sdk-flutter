@@ -1,8 +1,9 @@
 ## Unreleased
 
 * Route changes now emit `screen_view` (with the required `screenName`
-  property) on native platforms; `page_view` is emitted only on web, matching
-  the proto platform annotations.
+  property) on iOS/Android and `page_view` on web, matching the proto platform
+  annotations. Desktop (macOS/Windows/Linux) emits no navigation event; route
+  context still rides on the `$url`/`$referrer` auto-properties.
 * All notification helpers (`received`/`clicked`/`dismissed`) now default a
   missing, empty, or non-string `campaignId` to `(unknown)`. The notification
   schemas require a non-empty campaign_id, so received/dismissed events

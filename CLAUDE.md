@@ -143,7 +143,7 @@ Notification helper events:
 - `notification_clicked`
 - `notification_dismissed`
 
-Notification payload sanitization keeps only flat strings, booleans, finite numbers, and timestamps. All three notification helpers default a missing, empty, or non-string `campaignId` to `(unknown)` — the notification_* schemas require a non-empty campaign_id, so the server would otherwise reject the event as a permanent (silently dropped) failure.
+Notification payload sanitization keeps only flat strings, booleans, finite numbers, and timestamps. All three notification helpers default a missing, empty, or non-string `campaignId` to `(unknown)` — the notification_* schemas mark `campaign_id` as required (buf.validate `required`), so an event without a usable value is expected to be rejected server-side as a permanent (silently dropped) failure.
 
 ## Design Invariants
 
