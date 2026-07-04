@@ -32,6 +32,26 @@ void main() {
 
       final props = provider.properties();
       expect(props[r'$timezone'], DateTime.now().timeZoneName);
+    },
+  );
+
+  test(
+    'android auto-properties expose device fields but never the PII name',
+    () {
+      // Drives the Android mapping directly: the host runs on Linux, so the
+      // provider's device branch never populates on this platform. The raw
+      // payload includes a `name`, proving the mapping drops it rather than the
+      // assertion passing vacuously.
+      final props = SystemPugAutoPropertyProvider.androidProperties(const {
+        'version': {'release': '14'},
+        'manufacturer': 'Google',
+        'model': 'Pixel 8',
+        'name': "Praveen's Pixel",
+      });
+
+      expect(props[r'$osVersion'], '14');
+      expect(props[r'$deviceManufacturer'], 'Google');
+      expect(props[r'$deviceModel'], 'Pixel 8');
       // $deviceName is deliberately never sent (user-assigned names are PII).
       expect(props.containsKey(r'$deviceName'), isFalse);
     },

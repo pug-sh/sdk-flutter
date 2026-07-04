@@ -106,6 +106,17 @@ void main() {
     expect(custom.autoProperties[r'$referrer']?.value, '/home');
   });
 
+  test('an empty-string route updates state without emitting screen_view', () {
+    final client = testClient(autoPageViews: true);
+
+    // screen_view carries a required screen_name (proto), so an empty route
+    // name must emit nothing — otherwise the server permanently rejects the
+    // event and it is silently dropped. Guards the `url.isNotEmpty` check.
+    client.notifyRouteChanged('', null);
+
+    expect(client.queue.peekUnlocked(), isEmpty);
+  });
+
   test('desktop route changes update state without emitting a navigation '
       'event', () async {
     // screen_view is limited to iOS/Android and page_view is web-only, so a
@@ -122,6 +133,25 @@ void main() {
     final custom = client.queue.peekUnlocked().single;
     expect(custom.kind, 'custom');
     expect(custom.autoProperties[r'$url']?.value, '/home');
+  });
+
+  test('an unsupported native platform logs once and emits no event', () {
+    final logger = CapturingLogger();
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final client = testClient(logger: logger, autoPageViews: true);
+
+    client.notifyRouteChanged('/home', null);
+    client.notifyRouteChanged('/settings', '/home');
+
+    // Desktop has no navigation kind in the schema, so nothing is emitted — but
+    // we log once (not per route change) so a developer who wired the observer
+    // isn't left wondering why no navigation events ever appear.
+    expect(client.queue.peekUnlocked(), isEmpty);
+    expect(
+      logger.debugs.where((message) => message.contains('navigation')),
+      hasLength(1),
+    );
   });
 
   test('auto page views disabled does not track navigation events', () async {
