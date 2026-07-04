@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 
 import 'auto_properties.dart';
@@ -105,11 +106,22 @@ class PugClient with WidgetsBindingObserver {
     _currentRoute = url;
     // Route state feeds the `$url`/`$referrer` auto-properties attached to
     // every event (matching the web SDK), so it is tracked even when auto page
-    // views are disabled. Only the `page_view` event itself is gated by
-    // `autoPageViews`; like the web SDK it carries no explicit url/referrer
-    // props and relies on the auto-properties instead.
-    if (_options.autoPageViews) {
+    // views are disabled. Only the navigation event itself is gated by
+    // `autoPageViews`; it carries no explicit url/referrer props and relies on
+    // the auto-properties instead.
+    if (!_options.autoPageViews) {
+      return;
+    }
+    if (kIsWeb) {
       track('page_view');
+      return;
+    }
+    // Native runtimes emit screen_view — the proto marks page_view as a
+    // web-only kind ("Use screen_view for native mobile screens"). screen_view
+    // requires a non-empty screenName, so a null route (e.g. the last route
+    // being removed) updates route state without emitting an event.
+    if (url != null && url.isNotEmpty) {
+      track('screen_view', props: {'screenName': url});
     }
   }
 
@@ -130,7 +142,6 @@ class PugClient with WidgetsBindingObserver {
   bool _disposed = false;
   bool _isForeground = false;
   bool _started = false;
-  final Random _sampling = Random();
   String? _currentRoute;
   String? _previousRoute;
 
@@ -189,9 +200,6 @@ class PugClient with WidgetsBindingObserver {
         _options.logger.debug(
           'Pug track("$kind") dropped because tracking consent is denied.',
         );
-        return;
-      }
-      if (!_sampledIn()) {
         return;
       }
       final event = _createEvent(kind, props, options.timestampMillis);
@@ -385,11 +393,9 @@ class PugClient with WidgetsBindingObserver {
   }
 
   void trackNotificationOpened(Map<Object?, Object?> data) {
-    final props = sanitizeNotificationData(data);
-    props.putIfAbsent('campaignId', () => '(unknown)');
     track(
       'notification_clicked',
-      props: props,
+      props: _notificationProps(data),
       options: const TrackOptions(immediate: true),
     );
   }
@@ -399,7 +405,7 @@ class PugClient with WidgetsBindingObserver {
     // the event is not stranded in the queue if the OS suspends the process.
     track(
       'notification_received',
-      props: sanitizeNotificationData(data),
+      props: _notificationProps(data),
       options: const TrackOptions(immediate: true),
     );
   }
@@ -407,9 +413,24 @@ class PugClient with WidgetsBindingObserver {
   void trackNotificationDismissed(Map<Object?, Object?> data) {
     track(
       'notification_dismissed',
-      props: sanitizeNotificationData(data),
+      props: _notificationProps(data),
       options: const TrackOptions(immediate: true),
     );
+  }
+
+  /// Sanitizes a notification payload and guarantees a usable `campaignId`.
+  ///
+  /// The notification_* schemas require a non-empty campaign_id, so an event
+  /// without one is rejected at the server's validate interceptor — a permanent
+  /// error, silently dropping the event. Match the web SDK: a missing, empty,
+  /// or non-string campaignId becomes "(unknown)".
+  Map<String, Object?> _notificationProps(Map<Object?, Object?> data) {
+    final props = sanitizeNotificationData(data);
+    final campaignId = props['campaignId'];
+    if (campaignId is! String || campaignId.isEmpty) {
+      props['campaignId'] = '(unknown)';
+    }
+    return props;
   }
 
   @override
@@ -639,16 +660,6 @@ class PugClient with WidgetsBindingObserver {
     }
   }
 
-  bool _sampledIn() {
-    if (_options.samplingRate >= 1) {
-      return true;
-    }
-    if (_options.samplingRate <= 0) {
-      return false;
-    }
-    return _sampling.nextDouble() <= _options.samplingRate;
-  }
-
   Future<void> _startCampaignCapture() async {
     if (!_options.autoCaptureCampaigns) {
       return;
@@ -723,14 +734,9 @@ class PugClient with WidgetsBindingObserver {
 
 PugOptions _normalizeOptions(PugOptions options) {
   final logger = SafePugLogger(options.logger);
-  final samplingRate = options.samplingRate.clamp(0.0, 1.0);
-  if (samplingRate != options.samplingRate) {
-    logger.warn('samplingRate must be between 0 and 1; clamping.');
-  }
   return PugOptions(
     apiKey: options.apiKey,
     endpoint: options.endpoint,
-    samplingRate: samplingRate,
     batch: BatchConfig(
       maxSize: max(options.batch.maxSize, 1),
       maxWaitMs: max(options.batch.maxWaitMs, 0),
