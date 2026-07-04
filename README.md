@@ -85,8 +85,11 @@ leaves foreground.
 
 When `autoPageViews` is enabled (default), the SDK tracks a navigation event when
 the user navigates between routes: `screen_view` (with a `screenName` property) on
-iOS/Android/desktop, and `page_view` on web. To enable this feature, host apps must
-register the route observer with their Navigator:
+iOS/Android, and `page_view` on web. Desktop (macOS/Windows/Linux) emits no
+navigation event, since the schema limits `screen_view` to iOS/Android and
+`page_view` to web; the route still updates the `$url`/`$referrer` auto-properties
+carried by other events. To enable this feature, host apps must register the route
+observer with their Navigator:
 
 ```dart
 // In your MaterialApp/Navigator setup

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter/pug_flutter.dart';
@@ -102,6 +104,24 @@ void main() {
     final custom = client.queue.peekUnlocked().last;
     expect(custom.autoProperties.containsKey(r'$url'), isFalse);
     expect(custom.autoProperties[r'$referrer']?.value, '/home');
+  });
+
+  test('desktop route changes update state without emitting a navigation '
+      'event', () async {
+    // screen_view is limited to iOS/Android and page_view is web-only, so a
+    // desktop route change emits no navigation event — but route state still
+    // moves on for the $url/$referrer auto-properties on later events.
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final client = testClient(autoPageViews: true);
+
+    client.notifyRouteChanged('/home', null);
+    expect(client.queue.peekUnlocked(), isEmpty);
+
+    client.track('custom');
+    final custom = client.queue.peekUnlocked().single;
+    expect(custom.kind, 'custom');
+    expect(custom.autoProperties[r'$url']?.value, '/home');
   });
 
   test('auto page views disabled does not track navigation events', () async {
