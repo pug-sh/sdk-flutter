@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'contracts.dart';
@@ -30,6 +31,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     DeviceInfoPlugin? deviceInfo,
     Connectivity? connectivity,
     Future<PackageInfo> Function()? packageInfo,
+    Future<String> Function()? localTimezone,
     PugLogger? logger,
   }) async {
     final properties = <String, Object?>{};
@@ -42,6 +44,15 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       properties[r'$appBuild'] = info.buildNumber;
     } catch (error) {
       logger?.warn('Pug could not read package info for auto properties.');
+    }
+
+    try {
+      final timezone = await (localTimezone ?? _systemTimezone)();
+      if (timezone.isNotEmpty) {
+        properties[r'$timezone'] = timezone;
+      }
+    } catch (error) {
+      logger?.warn('Pug could not read the IANA timezone for auto properties.');
     }
 
     try {
@@ -74,6 +85,9 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       // device-info value ($osVersion in _staticProperties) when available.
       r'$osVersion': Platform.operatingSystemVersion,
       r'$locale': PlatformDispatcher.instance.locale.toLanguageTag(),
+      // Fallback abbreviation (e.g. "CEST", locale-dependent); overridden by
+      // the preloaded IANA identifier ($timezone in _staticProperties) when
+      // flutter_timezone resolved it.
       r'$timezone': DateTime.now().timeZoneName,
       ..._screenProperties(),
       ..._staticProperties,
@@ -88,11 +102,11 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     }
     if (Platform.isAndroid) {
       final info = await plugin.androidInfo;
+      // No $deviceName: user-assigned device names ("Praveen's Pixel") are PII.
       return {
         r'$osVersion': info.version.release,
         r'$deviceManufacturer': _readString(info, 'manufacturer'),
         r'$deviceModel': _readString(info, 'model'),
-        r'$deviceName': _readString(info, 'name'),
       };
     }
     if (Platform.isIOS) {
@@ -147,6 +161,9 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       r'$screenScale': ratio,
     };
   }
+
+  static Future<String> _systemTimezone() async =>
+      (await FlutterTimezone.getLocalTimezone()).identifier;
 
   static String _readString(BaseDeviceInfo info, String name) {
     return info.data[name]?.toString() ?? '';

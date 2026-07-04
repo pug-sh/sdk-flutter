@@ -7,7 +7,6 @@ class PugOptions {
   const PugOptions({
     required this.apiKey,
     this.endpoint = 'https://api.pugs.dev',
-    this.samplingRate = 1.0,
     this.batch = const BatchConfig(),
     this.session = const SessionConfig(),
     this.autoTrack = true,
@@ -24,7 +23,6 @@ class PugOptions {
 
   final String apiKey;
   final String endpoint;
-  final double samplingRate;
   final BatchConfig batch;
   final SessionConfig session;
   final bool autoTrack;
@@ -41,7 +39,6 @@ class PugOptions {
   PugOptions copyWith({
     String? apiKey,
     String? endpoint,
-    double? samplingRate,
     BatchConfig? batch,
     SessionConfig? session,
     bool? autoTrack,
@@ -58,7 +55,6 @@ class PugOptions {
     return PugOptions(
       apiKey: apiKey ?? this.apiKey,
       endpoint: endpoint ?? this.endpoint,
-      samplingRate: samplingRate ?? this.samplingRate,
       batch: batch ?? this.batch,
       session: session ?? this.session,
       autoTrack: autoTrack ?? this.autoTrack,

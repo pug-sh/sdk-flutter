@@ -245,7 +245,7 @@ void main() {
       defaultConsent: TrackingConsent.denied,
     );
 
-    test('queued page_view is dropped when denied, flows once granted', () {
+    test('queued screen_view is dropped when denied, flows once granted', () {
       final client = buildClient(autoPageViews: true, consent: denied);
       addTearDown(client.destroy);
 
@@ -254,7 +254,7 @@ void main() {
 
       client.optInTracking();
       client.notifyRouteChanged('/about', '/home');
-      expect(client.queue.peekUnlocked().map((e) => e.kind), ['page_view']);
+      expect(client.queue.peekUnlocked().map((e) => e.kind), ['screen_view']);
     });
 
     test('queued notification_received is dropped when denied', () {
