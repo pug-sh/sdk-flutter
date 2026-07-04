@@ -101,13 +101,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       return const {};
     }
     if (Platform.isAndroid) {
-      final info = await plugin.androidInfo;
-      // No $deviceName: user-assigned device names ("Praveen's Pixel") are PII.
-      return {
-        r'$osVersion': info.version.release,
-        r'$deviceManufacturer': _readString(info, 'manufacturer'),
-        r'$deviceModel': _readString(info, 'model'),
-      };
+      return androidProperties((await plugin.androidInfo).data);
     }
     if (Platform.isIOS) {
       final info = await plugin.iosInfo;
@@ -159,6 +153,23 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       r'$screenWidth': (view.physicalSize.width / ratio).round(),
       r'$screenHeight': (view.physicalSize.height / ratio).round(),
       r'$screenScale': ratio,
+    };
+  }
+
+  /// Maps the raw Android device-info payload to auto-properties.
+  ///
+  /// Keyed on the plugin's `.data` map rather than the typed [AndroidDeviceInfo]
+  /// so the mapping is unit-testable without constructing that heavyweight
+  /// object. Deliberately omits `$deviceName`: user-assigned device names
+  /// ("Praveen's Pixel") are PII.
+  @visibleForTesting
+  static Map<String, Object?> androidProperties(Map<String, dynamic> data) {
+    final version = data['version'];
+    return {
+      r'$osVersion':
+          version is Map ? (version['release']?.toString() ?? '') : '',
+      r'$deviceManufacturer': data['manufacturer']?.toString() ?? '',
+      r'$deviceModel': data['model']?.toString() ?? '',
     };
   }
 

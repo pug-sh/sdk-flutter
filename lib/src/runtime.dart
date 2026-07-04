@@ -127,9 +127,31 @@ class PugClient with WidgetsBindingObserver {
     final platform = defaultTargetPlatform;
     final emitsScreenView =
         platform == TargetPlatform.iOS || platform == TargetPlatform.android;
-    if (emitsScreenView && url != null && url.isNotEmpty) {
+    if (!emitsScreenView) {
+      _warnUnsupportedNavPlatformOnce(platform, url);
+      return;
+    }
+    if (url != null && url.isNotEmpty) {
       track('screen_view', props: {'screenName': url});
     }
+  }
+
+  /// Logs once, at debug level, when a real route change lands on a native
+  /// platform with no navigation event kind (desktop and other non-iOS/Android
+  /// targets), so a developer who wired [PugRouteObserver] isn't left wondering
+  /// why no navigation events ever appear. Route context still rides on the
+  /// `$url`/`$referrer` auto-properties. Stays silent on null/empty routes,
+  /// since nothing was navigated to.
+  void _warnUnsupportedNavPlatformOnce(TargetPlatform platform, String? url) {
+    if (_warnedNoNavPlatform || url == null || url.isEmpty) {
+      return;
+    }
+    _warnedNoNavPlatform = true;
+    _options.logger.debug(
+      'Pug: auto navigation events are emitted only on iOS/Android '
+      '(screen_view) and web (page_view); ${platform.name} emits none. Route '
+      'context still rides on the \$url/\$referrer auto-properties.',
+    );
   }
 
   final String projectId;
@@ -151,6 +173,7 @@ class PugClient with WidgetsBindingObserver {
   bool _started = false;
   String? _currentRoute;
   String? _previousRoute;
+  bool _warnedNoNavPlatform = false;
 
   /// Exposed so `Pug.logger` can surface the configured logger to callers
   /// (notably `TrackNamespace`) post-init. Safe to call before `start()`.
@@ -427,10 +450,12 @@ class PugClient with WidgetsBindingObserver {
 
   /// Sanitizes a notification payload and guarantees a usable `campaignId`.
   ///
-  /// The notification_* schemas require a non-empty campaign_id, so an event
-  /// without one is rejected at the server's validate interceptor — a permanent
-  /// error, silently dropping the event. Match the web SDK: a missing, empty,
-  /// or non-string campaignId becomes "(unknown)".
+  /// The notification_* schemas mark `campaign_id` as required (buf.validate
+  /// `required`), so an event that omits it is expected to be rejected
+  /// server-side — and a permanent rejection drops the event (see the transport
+  /// notes on permanent failures). To stay safe we always send a value: like
+  /// the web SDK, a missing, empty, or non-string `campaignId` becomes
+  /// "(unknown)".
   Map<String, Object?> _notificationProps(Map<Object?, Object?> data) {
     final props = sanitizeNotificationData(data);
     final campaignId = props['campaignId'];
