@@ -30,8 +30,8 @@ make check        # protos + format + analyze + test
 
 - `Pug.init(projectId, options)` initializes asynchronously with `SharedPreferencesPugStorage` and enhanced mobile auto-properties by default.
 - Persistence is opt-out: provide `storage: MemoryPugStorage()` or another custom `PugStorage` to override the default.
-- All public SDK calls are best-effort and must never throw.
-- `Pug.identify(externalId, traits:)` logs failures and completes normally.
+- All public SDK calls are best-effort and never throw, except `init()`, which throws synchronously on invalid input (empty `projectId`/`apiKey`) so a misconfiguration surfaces at the call site. See `## Design Invariants`.
+- `Pug.identify(externalId, traits:)` never throws — invalid input and transport failures are logged and the future completes normally, matching the web SDK.
 - `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` manage identity/session/runtime state.
 - `Pug.optInTracking()`, `Pug.optOutTracking()`, `Pug.getTrackingConsent()`, and `Pug.isTrackingEnabled()` manage tracking consent. See `### Tracking Consent`.
 - `Pug.track` is a callable `TrackNamespace`:
@@ -147,8 +147,9 @@ Notification payload sanitization keeps only flat strings, booleans, finite numb
 
 ## Design Invariants
 
-- `track()` (typed and untyped), `reset()`, `rotate()`, `flush()`, `destroy()`, and the `PugPush` helpers are best-effort: they catch failures, log, and never throw or crash the host app.
-- `init()` and `identify()` are the exceptions: they throw on invalid input, and re-throw init/transport failures after logging, so callers can await and handle them. Push registration logs failures and completes normally.
+- `track()` (typed and untyped), `identify()`, `reset()`, `rotate()`, `flush()`, `destroy()`, and the `PugPush` helpers are best-effort: they catch failures, log, and never throw or crash the host app.
+- `init()` is the exception: it throws synchronously (before the async gap) on invalid input (empty `projectId`/`apiKey`), matching the web SDK's synchronous `init()`, so a misconfiguration surfaces at the call site rather than as a rejected future. Validation lives in the non-`async` `initialize()`; the async setup is delegated to `_start()`. Setup/start failures are logged and swallowed (best-effort degrade), matching the web SDK, which throws on invalid input but continues past failed persistence/session/profile setup. `identify()` is awaitable but never throws — invalid input and transport failures are logged and the future completes normally. Push registration logs failures and completes normally.
+- The internal `PugClient.identify` still throws on invalid input and transport failure; the `Pug.identify` facade catches and swallows those, so the never-throw guarantee lives at the public boundary.
 - Repeated init warns and no-ops.
 - Background lifecycle transitions should flush queued events even when `autoTrack` is disabled.
 - `destroy()` is async and awaits a best-effort final flush before disposing local runtime resources; the detached singleton resets synchronously so a follow-up `init()` works even if the caller does not await.

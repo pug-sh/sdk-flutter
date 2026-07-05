@@ -88,18 +88,29 @@ class Pug implements TrackContext {
   /// consent. Returns `false` if called before [init].
   static bool isTrackingEnabled() => _shared._isTrackingEnabled();
 
-  Future<void> initialize(String projectId, PugOptions options) async {
-    final logger = SafePugLogger(options.logger);
+  Future<void> initialize(String projectId, PugOptions options) {
+    // Validate synchronously, before the async gap, so a misconfiguration
+    // throws at the call site (like the web SDK's synchronous init()) instead
+    // of surfacing as a rejected future the caller has to await to observe.
     if (projectId.trim().isEmpty) {
       throw ArgumentError('projectId is required');
     }
     if (options.apiKey.trim().isEmpty) {
       throw ArgumentError('apiKey is required');
     }
+    final logger = SafePugLogger(options.logger);
     if (_client != null) {
       logger.warn('Pug.init() called after initialization; ignoring.');
-      return;
+      return Future<void>.value();
     }
+    return _start(projectId, options, logger);
+  }
+
+  Future<void> _start(
+    String projectId,
+    PugOptions options,
+    PugLogger logger,
+  ) async {
     try {
       final resolvedOptions = options.copyWith(
         logger: logger,
@@ -121,8 +132,11 @@ class Pug implements TrackContext {
         _client = client;
       }
     } catch (error, stackTrace) {
+      // Best-effort: a failed setup/start is logged and swallowed (matching the
+      // web SDK) so it cannot crash the host app. Invalid input throws
+      // synchronously in initialize(); here the client stays detached and
+      // subsequent SDK calls no-op.
       logger.error('Pug init failed.', error, stackTrace);
-      rethrow;
     }
   }
 
@@ -140,9 +154,6 @@ class Pug implements TrackContext {
     String externalId, {
     Map<String, Object?> traits = const {},
   }) async {
-    if (externalId.trim().isEmpty) {
-      throw ArgumentError('externalId is required');
-    }
     final client = _client;
     if (client == null) {
       _fallbackLogger.warn('Pug.identify() called before init(); ignoring.');
@@ -151,8 +162,10 @@ class Pug implements TrackContext {
     try {
       await client.identify(externalId, traits: traits);
     } catch (error, stackTrace) {
+      // Best-effort: identify never throws. Invalid input and transport
+      // failures (raised by the client) are logged and swallowed here so a
+      // failed identify cannot crash the host app.
       _fallbackLogger.error('Pug identify failed.', error, stackTrace);
-      rethrow;
     }
   }
 

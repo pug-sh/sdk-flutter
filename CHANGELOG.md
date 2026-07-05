@@ -1,5 +1,11 @@
 ## Unreleased
 
+* `Pug.identify()` no longer throws: invalid input and transport failures are
+  now logged and the future completes normally, matching the web SDK's
+  never-throw `identify()`. `Pug.init()` still throws on invalid input (empty
+  `projectId`/`apiKey`) — now synchronously, before the async gap, so it
+  surfaces at the call site — but logs and swallows setup/start failures
+  instead of re-throwing them, matching the web SDK's degrade-and-continue init.
 * Route changes now emit `screen_view` (with the required `screenName`
   property) on iOS/Android and `page_view` on web, matching the proto platform
   annotations. Desktop (macOS/Windows/Linux) emits no navigation event; route
