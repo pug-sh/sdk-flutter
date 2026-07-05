@@ -1,5 +1,10 @@
 ## Unreleased
 
+* **Breaking:** bumped the `app_links` constraint to `>=6.3.0 <8.0.0` (was
+  `>=3.5.1 <4.0.0`) and switched campaign capture to the app_links 6.x
+  `getInitialLink()` API (was the 3.x `getInitialAppLink()`; `uriLinkStream` is
+  unchanged). Apps already on app_links 6.x/7.x — e.g. for their own deep
+  linking — can now depend on this SDK without a version conflict.
 * `Pug.identify()` no longer throws: invalid input and transport failures are
   now logged and the future completes normally, matching the web SDK's
   never-throw `identify()`. `Pug.init()` still throws on invalid input (empty
