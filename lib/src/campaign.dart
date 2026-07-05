@@ -15,7 +15,7 @@ class AppLinksPugLinkProvider implements PugLinkProvider {
   final AppLinks _appLinks;
 
   @override
-  Future<Uri?> initialUri() => _appLinks.getInitialAppLink();
+  Future<Uri?> initialUri() => _appLinks.getInitialLink();
 
   @override
   Stream<Uri> get uriStream => _appLinks.uriLinkStream;
