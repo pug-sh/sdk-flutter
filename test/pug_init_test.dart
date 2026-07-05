@@ -15,8 +15,10 @@ void main() {
   test(
     'init validates required values and repeated init warns and is ignored',
     () async {
-      await expectLater(
-        Pug.init('', const PugOptions(apiKey: 'key', autoTrack: false)),
+      // Validation is synchronous: the closure throws when invoked, before any
+      // future is returned.
+      expect(
+        () => Pug.init('', const PugOptions(apiKey: 'key', autoTrack: false)),
         throwsA(isA<ArgumentError>()),
       );
 
@@ -69,10 +71,35 @@ void main() {
   });
 
   test(
-    'identify before init warns, while invalid input and transport failures still throw',
+    'public Pug.identify never throws: before init, invalid input, or transport failure',
     () async {
       await expectLater(Pug.identify('user-before-init'), completes);
 
+      final failedTransport =
+          FakeTransport()
+            ..identifyError = const PugTransportException('identify failed');
+      await Pug.init(
+        'project',
+        PugOptions(
+          apiKey: 'key',
+          transport: failedTransport,
+          storage: MemoryPugStorage(),
+          autoTrack: false,
+        ),
+      );
+
+      // Invalid input and transport failures are logged and swallowed at the
+      // public boundary, matching the web SDK's never-throw identify().
+      await expectLater(Pug.identify(''), completes);
+      await expectLater(Pug.identify('user-1'), completes);
+
+      await Pug.destroy();
+    },
+  );
+
+  test(
+    'internal PugClient.identify still throws on invalid input and transport failure',
+    () async {
       final failedTransport =
           FakeTransport()
             ..identifyError = const PugTransportException('identify failed');
@@ -88,8 +115,8 @@ void main() {
   );
 
   test('init and identify remain safe when logger throws', () async {
-    await expectLater(
-      Pug.init(
+    expect(
+      () => Pug.init(
         '',
         const PugOptions(
           apiKey: 'key',
