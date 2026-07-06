@@ -2,6 +2,11 @@
 # .pubignore only affects `pub publish`; it does not change git tracking.
 # Consumers get lib/ + the generated protobuf; internal docs and build tooling
 # (proto sources, codegen, Makefile, planning docs) are not shipped.
+#
+# IMPORTANT: when a .pubignore is present, `pub publish` does NOT consult
+# .gitignore, so generated/build output that .gitignore already excludes must be
+# re-listed here or it gets bundled into the archive (e.g. build/ carries 100+ MB
+# of Flutter .dill test caches).
 
 # Internal / AI / planning docs
 CLAUDE.md
@@ -14,3 +19,9 @@ tool/
 # Repo automation
 .github/
 .claude/
+
+# Generated / build output (excluded by .gitignore, but .pubignore replaces it)
+build/
+coverage/
+test-results/
+pr-review.md
