@@ -1,3 +1,13 @@
+## 0.0.2
+
+* Replace the `connectrpc` dependency with a hand-rolled native Connect *unary*
+  transport over `package:http`. This drops the `dependency_overrides: protobuf:
+  ^6.0.0` workaround that 0.0.1 forced consumers to add: the SDK now resolves
+  cleanly against the `protobuf` 6.x runtime the generated code requires. Connect
+  error bodies are parsed for `code`/`message`; permanent codes drop the batch
+  while transient/unknown errors (e.g. `SocketException`) retry.
+* Add a runnable example app under `example/`.
+
 ## 0.0.1
 
 Initial release.
