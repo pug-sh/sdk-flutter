@@ -24,16 +24,15 @@ Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`. The generated protobuf co
 
 Add the package to your app:
 
+```bash
+flutter pub add pug_flutter
+```
+
+Or add it to `pubspec.yaml` directly:
+
 ```yaml
 dependencies:
   pug_flutter: ^0.0.1
-
-# Required for now: connectrpc 1.0.0 caps protobuf at `<5.0.0`, but this SDK's
-# generated code needs the 6.x runtime. Add this override to your app so
-# `pub get` resolves (dependency_overrides only apply to the root app, so the
-# SDK's own override does not carry over to your project).
-dependency_overrides:
-  protobuf: ^6.0.0
 ```
 
 ## Initialize

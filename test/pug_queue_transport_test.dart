@@ -1,5 +1,8 @@
-import 'package:connectrpc/connect.dart' as connect;
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:pug_flutter/pug_flutter.dart';
 import 'package:pug_flutter/src/connect_transport.dart';
 import 'package:pug_flutter/src/event_queue_storage.dart';
@@ -147,18 +150,21 @@ void main() {
   );
 
   test(
-    'connect transport injects api key and maps permanent connect errors',
+    'connect transport posts proto with api key and maps permanent errors',
     () async {
-      final baseTransport =
-          FakeConnectTransport()
-            ..unaryError = connect.ConnectException(
-              connect.Code.invalidArgument,
-              'bad request payload',
-            );
+      http.Request? captured;
+      final httpClient = MockClient((request) async {
+        captured = request;
+        return http.Response(
+          '{"code":"invalid_argument","message":"bad request payload"}',
+          400,
+          headers: const {'content-type': 'application/json'},
+        );
+      });
       final transport = ConnectPugTransport(
         endpoint: 'http://example.com',
         apiKey: 'key',
-        transport: baseTransport,
+        httpClient: httpClient,
       );
 
       await expectLater(
@@ -169,23 +175,45 @@ void main() {
               .having((error) => error.isPermanent, 'isPermanent', isTrue),
         ),
       );
-      expect(baseTransport.lastHeaders?['x-api-key'], 'key');
+      expect(captured?.method, 'POST');
+      expect(captured?.headers['x-api-key'], 'key');
+      expect(captured?.headers['connect-protocol-version'], '1');
+      expect(captured?.headers['content-type'], contains('application/proto'));
       expect(
-        baseTransport.lastProcedure,
-        '/sdk.events.v1.EventsService/BatchCreate',
+        captured?.url.toString(),
+        'http://example.com/sdk.events.v1.EventsService/BatchCreate',
       );
+      expect(captured?.bodyBytes, isNotEmpty);
     },
   );
 
-  test('connect transport maps transient connect errors', () async {
-    await expectLater(
-      Future<void>.sync(
-        () =>
-            throw mapConnectError(
-              connect.ConnectException(connect.Code.unavailable, 'retry later'),
-              StackTrace.empty,
-            ),
+  test('connect transport completes normally on a 200 response', () async {
+    final httpClient = MockClient((request) async => http.Response('', 200));
+    final transport = ConnectPugTransport(
+      endpoint: 'https://api.pugs.dev',
+      apiKey: 'key',
+      httpClient: httpClient,
+    );
+
+    await expectLater(transport.send(fakeEvent('one')), completes);
+  });
+
+  test('connect transport maps a transient error response for retry', () async {
+    final httpClient = MockClient(
+      (request) async => http.Response(
+        '{"code":"unavailable","message":"retry later"}',
+        503,
+        headers: const {'content-type': 'application/json'},
       ),
+    );
+    final transport = ConnectPugTransport(
+      endpoint: 'http://example.com',
+      apiKey: 'key',
+      httpClient: httpClient,
+    );
+
+    await expectLater(
+      transport.send(fakeEvent('one')),
       throwsA(
         isA<PugTransportException>()
             .having((error) => error.code, 'code', 'unavailable')
@@ -194,21 +222,220 @@ void main() {
     );
   });
 
-  test('connect transport maps unknown (non-Connect) errors as transient', () {
+  test(
+    'connect transport falls back to HTTP status for non-JSON error bodies',
+    () async {
+      final httpClient = MockClient(
+        (request) async => http.Response('gateway timeout', 504),
+      );
+      final transport = ConnectPugTransport(
+        endpoint: 'http://example.com',
+        apiKey: 'key',
+        httpClient: httpClient,
+      );
+
+      await expectLater(
+        transport.send(fakeEvent('one')),
+        throwsA(
+          isA<PugTransportException>()
+              .having((error) => error.code, 'code', 'unavailable')
+              .having((error) => error.isPermanent, 'isPermanent', isFalse),
+        ),
+      );
+    },
+  );
+
+  test('connect transport maps a network failure as transient', () async {
+    final httpClient = MockClient(
+      (request) async => throw http.ClientException('offline'),
+    );
+    final transport = ConnectPugTransport(
+      endpoint: 'http://example.com',
+      apiKey: 'key',
+      httpClient: httpClient,
+    );
+
+    await expectLater(
+      transport.send(fakeEvent('one')),
+      throwsA(
+        isA<PugTransportException>().having(
+          (error) => error.isPermanent,
+          'isPermanent',
+          isFalse,
+        ),
+      ),
+    );
+  });
+
+  test('mapConnectError maps a Connect error by code', () {
+    final mapped = mapConnectError(
+      const ConnectException('unavailable', 'retry later'),
+      StackTrace.empty,
+    );
+    expect(mapped.code, 'unavailable');
+    expect(mapped.isPermanent, isFalse);
+  });
+
+  test('mapConnectError maps unknown (non-Connect) errors as transient', () {
     final mapped = mapConnectError(Exception('offline'), StackTrace.empty);
     expect(mapped.isPermanent, isFalse);
   });
 
-  test('connect transport maps Dart Errors (encode bugs) as permanent', () {
+  test('mapConnectError maps Dart Errors (encode bugs) as permanent', () {
     final mapped = mapConnectError(StateError('bad encode'), StackTrace.empty);
     expect(mapped.isPermanent, isTrue);
   });
 
-  test('connect transport maps undecodable responses as permanent', () {
+  test('mapConnectError maps undecodable responses as permanent', () {
     final mapped = mapConnectError(
       const FormatException('bad response body'),
       StackTrace.empty,
     );
     expect(mapped.isPermanent, isTrue);
+  });
+
+  test('isPermanentConnectCode classifies terminal codes', () {
+    expect(isPermanentConnectCode('invalid_argument'), isTrue);
+    expect(isPermanentConnectCode('unauthenticated'), isTrue);
+    expect(isPermanentConnectCode('unavailable'), isFalse);
+    expect(isPermanentConnectCode('internal'), isFalse);
+  });
+
+  test(
+    'connect transport maps bodyless HTTP statuses to Connect codes',
+    () async {
+      const cases = <int, (String, bool)>{
+        400: ('internal', false),
+        401: ('unauthenticated', true),
+        403: ('permission_denied', true),
+        404: ('unimplemented', true),
+        429: ('unavailable', false),
+        500: ('unknown', false),
+        502: ('unavailable', false),
+        503: ('unavailable', false),
+        504: ('unavailable', false),
+      };
+      for (final entry in cases.entries) {
+        final (expectedCode, expectedPermanent) = entry.value;
+        final transport = ConnectPugTransport(
+          endpoint: 'http://example.com',
+          apiKey: 'key',
+          httpClient: MockClient((_) async => http.Response('', entry.key)),
+        );
+        await expectLater(
+          transport.send(fakeEvent('one')),
+          throwsA(
+            isA<PugTransportException>()
+                .having((e) => e.code, 'code', expectedCode)
+                .having((e) => e.isPermanent, 'isPermanent', expectedPermanent),
+          ),
+          reason: 'HTTP ${entry.key}',
+        );
+      }
+    },
+  );
+
+  test(
+    'connect transport keeps a non-JSON error body as the message',
+    () async {
+      final transport = ConnectPugTransport(
+        endpoint: 'http://example.com',
+        apiKey: 'key',
+        httpClient: MockClient(
+          (_) async => http.Response('Request Entity Too Large', 413),
+        ),
+      );
+      await expectLater(
+        transport.send(fakeEvent('one')),
+        throwsA(
+          isA<PugTransportException>()
+              .having((e) => e.code, 'code', 'unknown')
+              .having((e) => e.isPermanent, 'isPermanent', isFalse)
+              .having(
+                (e) => e.message,
+                'message',
+                contains('Request Entity Too Large'),
+              ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'connect transport posts identify and subscribe to their procedures',
+    () async {
+      final captured = <String>[];
+      http.Client capturing() => MockClient((request) async {
+        captured.add(request.url.path);
+        return http.Response('', 200);
+      });
+
+      await ConnectPugTransport(
+        endpoint: 'http://example.com',
+        apiKey: 'key',
+        httpClient: capturing(),
+      ).identify(
+        const IdentifyRequest(
+          projectId: 'project',
+          externalId: 'user-1',
+          traits: {},
+        ),
+      );
+      await ConnectPugTransport(
+        endpoint: 'http://example.com',
+        apiKey: 'key',
+        httpClient: capturing(),
+      ).subscribeDevice(
+        const PushSubscription(
+          provider: 'fake',
+          platform: 'android',
+          token: 'token-1',
+          deviceId: 'device-1',
+        ),
+      );
+
+      expect(captured, [
+        '/sdk.profiles.v1.ProfilesSDKService/Identify',
+        '/sdk.devices.v1.DevicesService/Subscribe',
+      ]);
+    },
+  );
+
+  test('connect transport normalizes a trailing-slash endpoint', () async {
+    String? capturedUrl;
+    final transport = ConnectPugTransport(
+      endpoint: 'http://example.com/',
+      apiKey: 'key',
+      httpClient: MockClient((request) async {
+        capturedUrl = request.url.toString();
+        return http.Response('', 200);
+      }),
+    );
+    await transport.send(fakeEvent('one'));
+    expect(
+      capturedUrl,
+      'http://example.com/sdk.events.v1.EventsService/BatchCreate',
+    );
+  });
+
+  test('connect transport times out a hung request as transient', () async {
+    final gate = Completer<http.Response>();
+    final transport = ConnectPugTransport(
+      endpoint: 'http://example.com',
+      apiKey: 'key',
+      timeout: const Duration(milliseconds: 20),
+      httpClient: MockClient((_) => gate.future),
+    );
+    await expectLater(
+      transport.send(fakeEvent('one')),
+      throwsA(
+        isA<PugTransportException>().having(
+          (e) => e.isPermanent,
+          'isPermanent',
+          isFalse,
+        ),
+      ),
+    );
+    gate.complete(http.Response('', 200));
   });
 }
