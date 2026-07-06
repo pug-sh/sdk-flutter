@@ -3,7 +3,14 @@ PROTO_OUT := lib/src/gen
 PROTO_FILES := $(shell find proto -type f -name '*.proto' | sort)
 WELL_KNOWN_PROTO_FILES := google/protobuf/descriptor.proto
 
-.PHONY: protos sync-protos typed-track check-codegen verify-version format analyze test check ci
+# BSR module + pinned commit that proto/ is vendored from. The pin makes `make sync-protos`
+# reproducible and taking newer upstream protos a deliberate, reviewable change; builds never
+# touch BSR (proto/ + lib/src/gen are committed). To bump: `make proto-latest` for the newest
+# commit, set PROTO_COMMIT below, then `make sync-protos && make protos` and review the diff.
+PROTO_MODULE := buf.build/pugsh/pug
+PROTO_COMMIT := 739d784162d649a3be748db76d3fafd8
+
+.PHONY: protos sync-protos typed-track check-codegen verify-version format analyze test check ci proto-latest
 
 sync-protos:
 	@command -v buf >/dev/null || (echo "buf CLI is required; install: brew install bufbuild/buf/buf" && exit 1)
@@ -14,11 +21,15 @@ sync-protos:
 	# dashboard/**, public/**, workers/**) and the unused common/v1 filter/time
 	# protos are never re-synced. Add a `--path` here when the SDK starts using a
 	# new package.
-	buf export buf.build/fivebits/pug --output proto/ \
+	buf export $(PROTO_MODULE):$(PROTO_COMMIT) --output proto/ \
 		--path sdk \
 		--path common/events/v1 \
 		--path common/v1/property_value.proto
-	@echo "Synced SDK protos into proto/. Run 'make protos' to regenerate Dart code."
+	@echo "Synced SDK protos into proto/ at $(PROTO_COMMIT). Run 'make protos' to regenerate Dart code."
+
+# Print the newest commit on the module's main branch, to update PROTO_COMMIT above.
+proto-latest:
+	@buf registry module commit resolve $(PROTO_MODULE):main
 
 protos:
 	@command -v protoc >/dev/null || (echo "protoc is required" && exit 1)
