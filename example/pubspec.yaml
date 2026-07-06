@@ -1,0 +1,22 @@
+name: pug_flutter_example
+description: "Example app demonstrating the Pug Flutter SDK: init, track, identify, and automatic screen views."
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.29.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  pug_flutter:
+    path: ../
+
+dev_dependencies:
+  flutter_lints: ">=4.0.0 <7.0.0"
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

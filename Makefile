@@ -37,7 +37,10 @@ protos:
 	mkdir -p $(PROTO_OUT)
 	PATH="$$(dirname "$(PROTOC_GEN_DART)"):$$PATH" protoc --proto_path=proto --dart_out=$(PROTO_OUT) $(WELL_KNOWN_PROTO_FILES) $(PROTO_FILES)
 	find $(PROTO_OUT) \( -name '*.pbjson.dart' -o -name '*.pbserver.dart' \) -delete
-	find $(PROTO_OUT) -name '*.pbenum.dart' ! -path '$(PROTO_OUT)/buf/validate/validate.pbenum.dart' ! -path '$(PROTO_OUT)/google/protobuf/descriptor.pbenum.dart' -delete
+# Prune stray per-message pbenum files, but keep the ones a committed .pb.dart
+# still imports. Dropping common/events/v1/options.pbenum.dart (the Platform
+# enum, imported by options.pb.dart) leaves a dangling import that fails analysis.
+	find $(PROTO_OUT) -name '*.pbenum.dart' ! -path '$(PROTO_OUT)/buf/validate/validate.pbenum.dart' ! -path '$(PROTO_OUT)/google/protobuf/descriptor.pbenum.dart' ! -path '$(PROTO_OUT)/common/events/v1/options.pbenum.dart' -delete
 	rm -f $(PROTO_OUT)/google/protobuf/descriptor.pb.dart
 	$(MAKE) typed-track
 

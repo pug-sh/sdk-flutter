@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:connectrpc/connect.dart' as connect;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter/pug_flutter.dart';
@@ -167,39 +166,6 @@ Event fakeEvent(String kind) {
     customProperties: const {},
     autoProperties: const {},
   );
-}
-
-class FakeConnectTransport implements connect.Transport {
-  Object? unaryError;
-  connect.Headers? lastHeaders;
-  String? lastProcedure;
-
-  @override
-  Future<connect.UnaryResponse<I, O>> unary<I extends Object, O extends Object>(
-    connect.Spec<I, O> spec,
-    I input, [
-    connect.CallOptions? options,
-  ]) async {
-    lastProcedure = spec.procedure;
-    lastHeaders = options?.headers;
-    if (unaryError != null) {
-      throw unaryError!;
-    }
-    return connect.UnaryResponse(
-      spec,
-      connect.Headers(),
-      spec.outputFactory(),
-      connect.Headers(),
-    );
-  }
-
-  @override
-  Future<connect.StreamResponse<I, O>> stream<
-    I extends Object,
-    O extends Object
-  >(connect.Spec<I, O> spec, Stream<I> input, [connect.CallOptions? options]) {
-    throw UnimplementedError();
-  }
 }
 
 class FakeClock implements PugClock {
