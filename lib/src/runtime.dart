@@ -517,6 +517,9 @@ class PugClient with WidgetsBindingObserver {
         );
       }
       _queue.dispose();
+      if (_transport case final ConnectPugTransport transport) {
+        transport.close();
+      }
       unawaited(_linkSubscription?.cancel());
       _linkProvider?.dispose();
       _lifecycleBinding?.removeObserver(this);
