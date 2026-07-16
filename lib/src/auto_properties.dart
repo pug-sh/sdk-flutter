@@ -22,6 +22,15 @@ class PugStaticAutoPropertyProvider implements PugAutoPropertyProvider {
   Map<String, Object?> properties() => Map<String, Object?>.of(_properties);
 }
 
+const _platformNames = <TargetPlatform, String>{
+  TargetPlatform.android: 'android',
+  TargetPlatform.fuchsia: 'fuchsia',
+  TargetPlatform.iOS: 'ios',
+  TargetPlatform.linux: 'linux',
+  TargetPlatform.macOS: 'macos',
+  TargetPlatform.windows: 'windows',
+};
+
 class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
   SystemPugAutoPropertyProvider({
     Map<String, Object?> staticProperties = const {},
@@ -79,7 +88,10 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
   @override
   Map<String, Object?> properties() {
     return {
-      r'$platform': defaultTargetPlatform.name,
+      r'$platform': platformName(
+        isWeb: kIsWeb,
+        platform: defaultTargetPlatform,
+      ),
       r'$os': Platform.operatingSystem,
       // Fallback for desktop/web/failure; overridden below by the preloaded
       // device-info value ($osVersion in _staticProperties) when available.
@@ -92,6 +104,32 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       ..._screenProperties(),
       ..._staticProperties,
     };
+  }
+
+  /// Maps a Flutter target to the cross-SDK `$platform` value.
+  ///
+  /// The backend promotes `$platform` into a dedicated column verbatim, with no
+  /// normalization, so this lowercase set has to match what the rest of the
+  /// family sends — `web` from `@pug-sh/browser`, `android` from `sdk-android`,
+  /// `ios` from `sdk-ios` — or a cross-SDK breakdown splits one platform into
+  /// per-SDK buckets. On native targets the result equals
+  /// [Platform.operatingSystem] (`$os`).
+  ///
+  /// [defaultTargetPlatform] cannot supply this directly: `.name` keeps the
+  /// enum's casing (`iOS`, `macOS`), and on web it resolves to the *browser's
+  /// host* OS, so [isWeb] has to win. Both are parameters rather than reads of
+  /// the globals because `kIsWeb` is a compile-time constant tests cannot
+  /// override. A [TargetPlatform] added upstream degrades to its lowercased
+  /// name rather than breaking the build of every host app.
+  @visibleForTesting
+  static String platformName({
+    required bool isWeb,
+    required TargetPlatform platform,
+  }) {
+    if (isWeb) {
+      return 'web';
+    }
+    return _platformNames[platform] ?? platform.name.toLowerCase();
   }
 
   static Future<Map<String, Object?>> _deviceProperties(
