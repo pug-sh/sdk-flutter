@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:pug_flutter/pug_flutter.dart';
@@ -34,6 +35,56 @@ void main() {
       expect(props[r'$timezone'], DateTime.now().timeZoneName);
     },
   );
+
+  test('every native target maps to the cross-SDK lowercase platform', () {
+    const expected = <TargetPlatform, String>{
+      TargetPlatform.android: 'android',
+      TargetPlatform.fuchsia: 'fuchsia',
+      TargetPlatform.iOS: 'ios',
+      TargetPlatform.linux: 'linux',
+      TargetPlatform.macOS: 'macos',
+      TargetPlatform.windows: 'windows',
+    };
+    // A TargetPlatform added upstream lands here rather than reaching the
+    // promoted `platform` column unmapped.
+    expect(expected.keys, containsAll(TargetPlatform.values));
+
+    for (final MapEntry(key: platform, value: name) in expected.entries) {
+      expect(
+        SystemPugAutoPropertyProvider.platformName(
+          isWeb: false,
+          platform: platform,
+        ),
+        name,
+      );
+    }
+  });
+
+  test('web reports web whatever host OS the browser resolves to', () {
+    // defaultTargetPlatform reports the browser's host OS on web, so every
+    // value is reachable there; `web` has to win to match @pug-sh/browser and
+    // to keep Flutter web out of the native ios/android buckets.
+    for (final platform in TargetPlatform.values) {
+      expect(
+        SystemPugAutoPropertyProvider.platformName(
+          isWeb: true,
+          platform: platform,
+        ),
+        'web',
+      );
+    }
+  });
+
+  test('properties reports the lowercase platform, not the enum name', () {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final provider = SystemPugAutoPropertyProvider();
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    expect(provider.properties()[r'$platform'], 'ios');
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    expect(provider.properties()[r'$platform'], 'macos');
+  });
 
   test(
     'android auto-properties expose device fields but never the PII name',
