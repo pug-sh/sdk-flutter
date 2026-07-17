@@ -1,3 +1,20 @@
+## 0.0.3
+
+* Fix the `$platform` auto-property to send the cross-SDK lowercase value set:
+  `web`, `android`, `ios`, `macos`, `linux`, `windows`, `fuchsia`. It previously
+  came from `defaultTargetPlatform.name`, which keeps the enum's casing, so this
+  SDK reported `iOS`/`macOS` where the rest of the Pug SDKs send `ios`/`macos`.
+  The backend promotes `$platform` into a dedicated column verbatim, so the
+  mismatch split one platform into per-SDK buckets in any cross-SDK breakdown.
+* Fix `$platform` on Flutter web, which reported the *browser's host* OS rather
+  than `web` — a web app on an iPhone was indistinguishable from native iOS
+  traffic. `$platform` is now always `web` there, and equals `$os` on every
+  native target.
+* Document the auto-properties attached to every event in the README.
+
+Dashboards, filters, or saved segments that match the old `iOS`/`macOS` casing
+(or that treated Flutter web traffic as iOS) need updating to the lowercase set.
+
 ## 0.0.2
 
 * Replace the `connectrpc` dependency with a hand-rolled native Connect *unary*
