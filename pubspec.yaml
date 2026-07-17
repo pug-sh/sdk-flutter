@@ -1,6 +1,6 @@
 name: pug_flutter
 description: "Pug analytics, identity, session, batching, and push device-registration SDK for Flutter."
-version: 0.0.2
+version: 0.0.3
 homepage: https://github.com/pug-sh/sdk-flutter
 repository: https://github.com/pug-sh/sdk-flutter
 

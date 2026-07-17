@@ -32,7 +32,7 @@ Or add it to `pubspec.yaml` directly:
 
 ```yaml
 dependencies:
-  pug_flutter: ^0.0.2
+  pug_flutter: ^0.0.3
 ```
 
 ## Initialize
@@ -125,6 +125,51 @@ await Pug.init(
   const PugOptions(
     apiKey: 'pug_api_key',
     autoCaptureCampaigns: false,
+  ),
+);
+```
+
+## Auto Properties
+
+Every event carries auto-properties alongside its own props. Names are prefixed
+with `$` to keep them distinct from your properties:
+
+| Property | Value |
+| --- | --- |
+| `$projectId` | The project ID passed to `Pug.init(...)`. |
+| `$sdkVersion` | This package's version. |
+| `$platform` | `web`, `android`, `ios`, `macos`, `linux`, `windows`, or `fuchsia`. |
+| `$os` | The operating system. Equals `$platform` on native targets. |
+| `$osVersion` | The operating system version. |
+| `$locale` | BCP 47 language tag, such as `en-US`. |
+| `$timezone` | IANA identifier, such as `Asia/Kolkata`. Falls back to the platform abbreviation when unavailable. |
+| `$screenWidth`, `$screenHeight`, `$screenScale` | Logical screen size and device pixel ratio. |
+| `$appName`, `$appPackage`, `$appVersion`, `$appBuild` | Host app identity, where available. |
+| `$deviceManufacturer`, `$deviceModel` | Device identity, where available. |
+| `$networkType` | `wifi`, `mobile`, `ethernet`, `vpn`, `bluetooth`, `other`, `none`, or `unknown`. |
+| `$url`, `$referrer` | Current and previous route, once `PugRouteObserver` reports a change. |
+| `$utmSource` and the other campaign keys above | Latest captured campaign context. |
+
+`$platform` is a contract shared across the Pug SDKs rather than a Flutter
+detail: the values are lowercase so that a breakdown by platform reconciles
+across every SDK sending to the same project. On Flutter web it is always `web`,
+never the browser's host OS.
+
+`$deviceName` is deliberately never sent — user-assigned device names are PII.
+
+Auto-properties come from a `PugAutoPropertyProvider`. `Pug.init(...)` installs
+`SystemPugAutoPropertyProvider`, which preloads app, device, timezone, and
+network metadata from platform plugins. Tests should inject
+`PugStaticAutoPropertyProvider` instead, which needs no plugins:
+
+```dart
+await Pug.init(
+  'project-id',
+  PugOptions(
+    apiKey: 'test-key',
+    autoPropertyProvider: const PugStaticAutoPropertyProvider({
+      r'$platform': 'ios',
+    }),
   ),
 );
 ```
