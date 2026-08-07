@@ -1,3 +1,26 @@
+## 0.0.4
+
+* Add the `$deviceType` auto-property, reporting the form factor as `tv`,
+  `mobile`, or `desktop`. Android TV is detected from the device's system
+  features rather than the operating system, which reports plain `android`
+  there; `$platform` stays `android` so the value keeps matching the other Pug
+  SDKs. Omitted on web, where the host device is not detectable from Dart.
+* Fix `$deviceModel` shipping the literal `"Unknown device"`/`"Unknown Model"`
+  placeholders that `device_info_plus` returns when its marketing-name lookup
+  misses. Those now fall back to the device identifier (`iPhone`,
+  `MacBookPro18,3`). macOS was affected on any Mac absent from the plugin's
+  table, which previously had no placeholder check at all.
+* Omit `$osVersion` when the device-info payload has no version, instead of
+  sending an empty string that overwrote the `Platform.operatingSystemVersion`
+  fallback.
+* Derive `$platform` from `Platform.operatingSystem` instead of
+  `defaultTargetPlatform`, so `$platform` and `$os` are one value from one
+  source. No change to the value on any supported platform: this removes a
+  lookup table, a debug-only spoofing vector, and a `FlutterError` that
+  `defaultTargetPlatform` raises on targets outside its six-member enum.
+* Include the underlying error in the auto-property warning logs, which
+  previously reported only that a category had failed.
+
 ## 0.0.3
 
 * Fix the `$platform` auto-property to send the cross-SDK lowercase value set:

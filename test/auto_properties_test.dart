@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -36,54 +39,55 @@ void main() {
     },
   );
 
-  test('every native target maps to the cross-SDK lowercase platform', () {
-    const expected = <TargetPlatform, String>{
-      TargetPlatform.android: 'android',
-      TargetPlatform.fuchsia: 'fuchsia',
-      TargetPlatform.iOS: 'ios',
-      TargetPlatform.linux: 'linux',
-      TargetPlatform.macOS: 'macos',
-      TargetPlatform.windows: 'windows',
+  test('native platform is the operating system, lowercased', () {
+    const expected = {
+      'android': 'android',
+      'fuchsia': 'fuchsia',
+      'ios': 'ios',
+      'linux': 'linux',
+      'macos': 'macos',
+      'windows': 'windows',
+      'iOS': 'ios',
+      'macOS': 'macos',
     };
-    // A TargetPlatform added upstream lands here rather than reaching the
-    // promoted `platform` column unmapped.
-    expect(expected.keys, containsAll(TargetPlatform.values));
-
-    for (final MapEntry(key: platform, value: name) in expected.entries) {
+    for (final MapEntry(key: os, value: name) in expected.entries) {
       expect(
         SystemPugAutoPropertyProvider.platformName(
           isWeb: false,
-          platform: platform,
+          operatingSystem: os,
         ),
         name,
       );
     }
   });
 
-  test('web reports web whatever host OS the browser resolves to', () {
-    // defaultTargetPlatform reports the browser's host OS on web, so every
-    // value is reachable there; `web` has to win to match @pug-sh/browser and
-    // to keep Flutter web out of the native ios/android buckets.
-    for (final platform in TargetPlatform.values) {
+  test('web wins over the reported operating system', () {
+    for (final os in const ['macos', 'windows', 'linux', 'android', 'ios']) {
       expect(
         SystemPugAutoPropertyProvider.platformName(
           isWeb: true,
-          platform: platform,
+          operatingSystem: os,
         ),
         'web',
       );
     }
   });
 
-  test('properties reports the lowercase platform, not the enum name', () {
+  test('platform agrees with os and is not a function of the theming enum', () {
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final provider = SystemPugAutoPropertyProvider();
 
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    expect(provider.properties()[r'$platform'], 'ios');
+    final props = provider.properties();
+    expect(props[r'$platform'], Platform.operatingSystem);
+    expect(props[r'$platform'], props[r'$os']);
+  });
 
-    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-    expect(provider.properties()[r'$platform'], 'macos');
+  test('each os reaches its own device-info channel', () async {
+    expect(await _channelFor('ios'), 'ios');
+    expect(await _channelFor('android'), 'android');
+    expect(await _channelFor('macos'), 'macos');
+    expect(await _channelFor('fuchsia'), isNull);
   });
 
   test(
@@ -107,4 +111,139 @@ void main() {
       expect(props.containsKey(r'$deviceName'), isFalse);
     },
   );
+
+  test('apple auto-properties prefer the marketing name', () {
+    final props = SystemPugAutoPropertyProvider.appleProperties(const {
+      'systemVersion': '18.5',
+      'modelName': 'iPhone 15 Pro',
+      'model': 'iPhone',
+      'name': "Praveen's iPhone",
+    });
+
+    expect(props[r'$osVersion'], '18.5');
+    expect(props[r'$deviceManufacturer'], 'Apple');
+    expect(props[r'$deviceModel'], 'iPhone 15 Pro');
+    expect(props.containsKey(r'$deviceName'), isFalse);
+  });
+
+  test('an unresolved apple model falls back to the coarse identifier', () {
+    for (final placeholder in const ['Unknown device', 'Unknown Model', '']) {
+      final props = SystemPugAutoPropertyProvider.appleProperties({
+        'systemVersion': '18.5',
+        'modelName': placeholder,
+        'model': 'iPhone',
+      });
+
+      expect(props[r'$deviceModel'], 'iPhone');
+      expect(props[r'$osVersion'], '18.5');
+    }
+  });
+
+  test('device type is the form factor behind the platform', () {
+    const expected = {
+      'ios': 'mobile',
+      'android': 'mobile',
+      'macos': 'desktop',
+      'windows': 'desktop',
+      'linux': 'desktop',
+      'fuchsia': null,
+    };
+    for (final MapEntry(key: os, value: type) in expected.entries) {
+      expect(
+        SystemPugAutoPropertyProvider.deviceType(
+          isWeb: false,
+          operatingSystem: os,
+        ),
+        type,
+      );
+    }
+    expect(
+      SystemPugAutoPropertyProvider.deviceType(
+        isWeb: true,
+        operatingSystem: 'linux',
+      ),
+      isNull,
+    );
+  });
+
+  test('android tv is a tv, and a plain android device is not', () {
+    for (final feature in const [
+      'android.software.leanback',
+      'android.hardware.type.television',
+    ]) {
+      final props = SystemPugAutoPropertyProvider.androidProperties({
+        'model': 'Chromecast',
+        'systemFeatures': ['android.hardware.wifi', feature],
+      });
+      expect(props[r'$deviceType'], 'tv');
+    }
+
+    final phone = SystemPugAutoPropertyProvider.androidProperties(const {
+      'model': 'Pixel 8',
+      'systemFeatures': ['android.hardware.wifi', 'android.hardware.camera'],
+    });
+    // Left absent so properties()' `mobile` default survives the spread.
+    expect(phone.containsKey(r'$deviceType'), isFalse);
+  });
+
+  test('a preloaded device type overrides the one derived from the os', () {
+    final provider = SystemPugAutoPropertyProvider(
+      staticProperties: const {r'$deviceType': 'tv'},
+    );
+
+    expect(provider.properties()[r'$deviceType'], 'tv');
+  });
+
+  test('an unresolved macos model falls back to the identifier', () {
+    final props = SystemPugAutoPropertyProvider.macosProperties(const {
+      'modelName': 'Unknown Model',
+      'model': 'MacBookPro18,3',
+    });
+
+    expect(props[r'$deviceModel'], 'MacBookPro18,3');
+    expect(props[r'$deviceManufacturer'], 'Apple');
+  });
+
+  test('a missing os version is omitted, not sent empty', () {
+    expect(
+      SystemPugAutoPropertyProvider.appleProperties(const {'model': 'iPhone'}),
+      isNot(contains(r'$osVersion')),
+    );
+    expect(
+      SystemPugAutoPropertyProvider.androidProperties(const {'model': 'Pixel'}),
+      isNot(contains(r'$osVersion')),
+    );
+  });
+}
+
+/// Throws rather than returning a payload: the plugin's info types require ~14
+/// typed fields, none of which this assertion needs.
+Future<String?> _channelFor(String operatingSystem) async {
+  try {
+    await SystemPugAutoPropertyProvider.deviceProperties(
+      _ChannelSpy(),
+      isWeb: false,
+      operatingSystem: operatingSystem,
+    );
+    return null;
+  } on _Reached catch (reached) {
+    return reached.channel;
+  }
+}
+
+class _Reached implements Exception {
+  const _Reached(this.channel);
+  final String channel;
+}
+
+class _ChannelSpy extends DeviceInfoPlugin {
+  @override
+  Future<IosDeviceInfo> get iosInfo async => throw const _Reached('ios');
+
+  @override
+  Future<AndroidDeviceInfo> get androidInfo async =>
+      throw const _Reached('android');
+
+  @override
+  Future<MacOsDeviceInfo> get macOsInfo async => throw const _Reached('macos');
 }

@@ -22,13 +22,15 @@ class PugStaticAutoPropertyProvider implements PugAutoPropertyProvider {
   Map<String, Object?> properties() => Map<String, Object?>.of(_properties);
 }
 
-const _platformNames = <TargetPlatform, String>{
-  TargetPlatform.android: 'android',
-  TargetPlatform.fuchsia: 'fuchsia',
-  TargetPlatform.iOS: 'ios',
-  TargetPlatform.linux: 'linux',
-  TargetPlatform.macOS: 'macos',
-  TargetPlatform.windows: 'windows',
+/// `device_info_plus` marketing-name lookup misses. Non-empty, so an emptiness
+/// check alone would ship them as `$deviceModel`. From 13.1.0; recheck on bump.
+const _unknownAppleModels = {'Unknown device', 'Unknown Model'};
+
+/// `type.television` is the deprecated predecessor of `leanback`, still present
+/// on older Android TVs.
+const _televisionFeatures = {
+  'android.software.leanback',
+  'android.hardware.type.television',
 };
 
 class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
@@ -52,7 +54,9 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       properties[r'$appVersion'] = info.version;
       properties[r'$appBuild'] = info.buildNumber;
     } catch (error) {
-      logger?.warn('Pug could not read package info for auto properties.');
+      logger?.warn(
+        'Pug could not read package info for auto properties: $error',
+      );
     }
 
     try {
@@ -61,15 +65,23 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
         properties[r'$timezone'] = timezone;
       }
     } catch (error) {
-      logger?.warn('Pug could not read the IANA timezone for auto properties.');
+      logger?.warn(
+        'Pug could not read the IANA timezone for auto properties: $error',
+      );
     }
 
     try {
       properties.addAll(
-        await _deviceProperties(deviceInfo ?? DeviceInfoPlugin()),
+        await deviceProperties(
+          deviceInfo ?? DeviceInfoPlugin(),
+          isWeb: kIsWeb,
+          operatingSystem: kIsWeb ? '' : Platform.operatingSystem,
+        ),
       );
     } catch (error) {
-      logger?.warn('Pug could not read device info for auto properties.');
+      logger?.warn(
+        'Pug could not read device info for auto properties: $error',
+      );
     }
 
     try {
@@ -77,7 +89,9 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
           await (connectivity ?? Connectivity()).checkConnectivity();
       properties[r'$networkType'] = _networkType(results);
     } catch (error) {
-      logger?.warn('Pug could not read connectivity info for auto properties.');
+      logger?.warn(
+        'Pug could not read connectivity info for auto properties: $error',
+      );
     }
 
     return SystemPugAutoPropertyProvider(staticProperties: properties);
@@ -87,10 +101,14 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
 
   @override
   Map<String, Object?> properties() {
+    final type = deviceType(
+      isWeb: kIsWeb,
+      operatingSystem: Platform.operatingSystem,
+    );
     return {
       r'$platform': platformName(
         isWeb: kIsWeb,
-        platform: defaultTargetPlatform,
+        operatingSystem: Platform.operatingSystem,
       ),
       r'$os': Platform.operatingSystem,
       // Fallback for desktop/web/failure; overridden below by the preloaded
@@ -101,80 +119,80 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       // the preloaded IANA identifier ($timezone in _staticProperties) when
       // flutter_timezone resolved it.
       r'$timezone': DateTime.now().timeZoneName,
+      // androidProperties overrides this with `tv` via _staticProperties below.
+      if (type != null) r'$deviceType': type,
       ..._screenProperties(),
       ..._staticProperties,
     };
   }
 
-  /// Maps a Flutter target to the cross-SDK `$platform` value.
+  /// The cross-SDK `$platform` value, which the backend promotes into a column
+  /// verbatim — so it has to match what the rest of the family sends.
   ///
-  /// The backend promotes `$platform` into a dedicated column verbatim, with no
-  /// normalization, so this lowercase set has to match what the rest of the
-  /// family sends — `web` from `@pug-sh/browser`, `android` from `sdk-android`,
-  /// `ios` from `sdk-ios` — or a cross-SDK breakdown splits one platform into
-  /// per-SDK buckets. On native targets the result equals
-  /// [Platform.operatingSystem] (`$os`).
-  ///
-  /// [defaultTargetPlatform] cannot supply this directly: `.name` keeps the
-  /// enum's casing (`iOS`, `macOS`), and on web it resolves to the *browser's
-  /// host* OS, so [isWeb] has to win. Both are parameters rather than reads of
-  /// the globals because `kIsWeb` is a compile-time constant tests cannot
-  /// override. A [TargetPlatform] added upstream degrades to its lowercased
-  /// name rather than breaking the build of every host app.
+  /// Deliberately not [defaultTargetPlatform]: that keeps the enum's casing,
+  /// reports the browser's host OS on web, and throws outside its six members.
   @visibleForTesting
   static String platformName({
     required bool isWeb,
-    required TargetPlatform platform,
+    required String operatingSystem,
   }) {
     if (isWeb) {
       return 'web';
     }
-    return _platformNames[platform] ?? platform.name.toLowerCase();
+    return operatingSystem.toLowerCase();
   }
 
-  static Future<Map<String, Object?>> _deviceProperties(
-    DeviceInfoPlugin plugin,
-  ) async {
-    if (kIsWeb) {
+  /// `tv` never comes from here — Android TV reports `android`, so only
+  /// [androidProperties] can identify it. Null on web and unknown targets, so
+  /// `$deviceType` is omitted rather than guessed into the wrong bucket.
+  @visibleForTesting
+  static String? deviceType({
+    required bool isWeb,
+    required String operatingSystem,
+  }) {
+    if (isWeb) {
+      return null;
+    }
+    return switch (operatingSystem.toLowerCase()) {
+      'ios' || 'android' => 'mobile',
+      'macos' || 'windows' || 'linux' => 'desktop',
+      _ => null,
+    };
+  }
+
+  /// Takes [operatingSystem] rather than reading `Platform.isX` so the routing
+  /// is testable without platform channels.
+  @visibleForTesting
+  static Future<Map<String, Object?>> deviceProperties(
+    DeviceInfoPlugin plugin, {
+    required bool isWeb,
+    required String operatingSystem,
+  }) async {
+    if (isWeb) {
       return const {};
     }
-    if (Platform.isAndroid) {
-      return androidProperties((await plugin.androidInfo).data);
+    switch (operatingSystem) {
+      case 'android':
+        return androidProperties((await plugin.androidInfo).data);
+      case 'ios':
+        return appleProperties((await plugin.iosInfo).data);
+      case 'macos':
+        return macosProperties((await plugin.macOsInfo).data);
+      case 'linux':
+        final linux = await plugin.linuxInfo;
+        return {
+          r'$deviceManufacturer': _readString(linux, 'prettyName'),
+          r'$deviceModel': _readString(linux, 'name'),
+        };
+      case 'windows':
+        final windows = await plugin.windowsInfo;
+        return {
+          r'$deviceManufacturer': _readString(windows, 'computerName'),
+          r'$deviceModel': _readString(windows, 'productName'),
+        };
+      default:
+        return const {};
     }
-    if (Platform.isIOS) {
-      final info = await plugin.iosInfo;
-      final modelName = _readString(info, 'modelName');
-      return {
-        r'$osVersion': info.systemVersion,
-        r'$deviceManufacturer': 'Apple',
-        r'$deviceModel':
-            modelName.isNotEmpty ? modelName : _readString(info, 'model'),
-      };
-    }
-    if (Platform.isMacOS) {
-      final info = await plugin.macOsInfo;
-      final modelName = _readString(info, 'modelName');
-      return {
-        r'$deviceManufacturer': 'Apple',
-        r'$deviceModel':
-            modelName.isNotEmpty ? modelName : _readString(info, 'model'),
-      };
-    }
-    if (Platform.isLinux) {
-      final info = await plugin.linuxInfo;
-      return {
-        r'$deviceManufacturer': _readString(info, 'prettyName'),
-        r'$deviceModel': _readString(info, 'name'),
-      };
-    }
-    if (Platform.isWindows) {
-      final info = await plugin.windowsInfo;
-      return {
-        r'$deviceManufacturer': _readString(info, 'computerName'),
-        r'$deviceModel': _readString(info, 'productName'),
-      };
-    }
-    return const {};
   }
 
   static Map<String, Object?> _screenProperties() {
@@ -203,12 +221,46 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
   @visibleForTesting
   static Map<String, Object?> androidProperties(Map<String, dynamic> data) {
     final version = data['version'];
+    final osVersion =
+        version is Map ? (version['release']?.toString() ?? '') : '';
+    final features = data['systemFeatures'];
     return {
-      r'$osVersion':
-          version is Map ? (version['release']?.toString() ?? '') : '',
+      // Empty would clobber properties()' Platform.operatingSystemVersion.
+      if (osVersion.isNotEmpty) r'$osVersion': osVersion,
       r'$deviceManufacturer': data['manufacturer']?.toString() ?? '',
       r'$deviceModel': data['model']?.toString() ?? '',
+      if (features is List && features.any(_televisionFeatures.contains))
+        r'$deviceType': 'tv',
     };
+  }
+
+  /// Omits the payload's `name`: user-assigned device names are PII.
+  @visibleForTesting
+  static Map<String, Object?> appleProperties(Map<String, dynamic> data) {
+    final osVersion = data['systemVersion']?.toString() ?? '';
+    return {
+      if (osVersion.isNotEmpty) r'$osVersion': osVersion,
+      r'$deviceManufacturer': 'Apple',
+      r'$deviceModel': _appleModel(data),
+    };
+  }
+
+  @visibleForTesting
+  static Map<String, Object?> macosProperties(Map<String, dynamic> data) {
+    return {
+      r'$deviceManufacturer': 'Apple',
+      r'$deviceModel': _appleModel(data),
+    };
+  }
+
+  /// The marketing name when the plugin resolved one, else the raw identifier —
+  /// "iPhone" from `UIDevice.model`, "MacBookPro18,3" from sysctl.
+  static String _appleModel(Map<String, dynamic> data) {
+    final modelName = data['modelName']?.toString() ?? '';
+    if (modelName.isNotEmpty && !_unknownAppleModels.contains(modelName)) {
+      return modelName;
+    }
+    return data['model']?.toString() ?? '';
   }
 
   static Future<String> _systemTimezone() async =>
