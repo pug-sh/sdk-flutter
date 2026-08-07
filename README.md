@@ -138,7 +138,8 @@ with `$` to keep them distinct from your properties:
 | --- | --- |
 | `$projectId` | The project ID passed to `Pug.init(...)`. |
 | `$sdkVersion` | This package's version. |
-| `$platform` | `web`, `android`, `ios`, `macos`, `linux`, `windows`, or `fuchsia`. |
+| `$platform` | `web` on Flutter web, otherwise the lowercase operating system reported by the target — `android`, `ios`, `macos`, `linux`, `windows`, and `fuchsia` today, with any other value passed through as-is. |
+| `$deviceType` | `tv`, `mobile`, or `desktop`. Omitted on web, where the host device is not detectable. Android TV reports `$platform: android` with `$deviceType: tv`. |
 | `$os` | The operating system. Equals `$platform` on native targets. |
 | `$osVersion` | The operating system version. |
 | `$locale` | BCP 47 language tag, such as `en-US`. |
