@@ -185,11 +185,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
           r'$deviceModel': _readString(linux, 'name'),
         };
       case 'windows':
-        final windows = await plugin.windowsInfo;
-        return {
-          r'$deviceManufacturer': _readString(windows, 'computerName'),
-          r'$deviceModel': _readString(windows, 'productName'),
-        };
+        return windowsProperties((await plugin.windowsInfo).data);
       default:
         return const {};
     }
@@ -243,6 +239,14 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       r'$deviceManufacturer': 'Apple',
       r'$deviceModel': _appleModel(data),
     };
+  }
+
+  /// Sends no `$deviceManufacturer`: Windows exposes no manufacturer, and its
+  /// host-identity fields (computerName, userName, registeredOwner) are all
+  /// user-set PII.
+  @visibleForTesting
+  static Map<String, Object?> windowsProperties(Map<String, dynamic> data) {
+    return {r'$deviceModel': data['productName']?.toString() ?? ''};
   }
 
   @visibleForTesting

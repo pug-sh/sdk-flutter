@@ -194,6 +194,19 @@ void main() {
     expect(provider.properties()[r'$deviceType'], 'tv');
   });
 
+  test('windows sends no manufacturer, since every candidate is PII', () {
+    final props = SystemPugAutoPropertyProvider.windowsProperties(const {
+      'productName': 'Windows 11 Pro',
+      'computerName': 'PRAVEEN-DESKTOP',
+      'userName': 'praveen',
+      'registeredOwner': 'Praveen Kumar',
+    });
+
+    expect(props[r'$deviceModel'], 'Windows 11 Pro');
+    expect(props.containsKey(r'$deviceManufacturer'), isFalse);
+    expect(props.values, isNot(contains('PRAVEEN-DESKTOP')));
+  });
+
   test('an unresolved macos model falls back to the identifier', () {
     final props = SystemPugAutoPropertyProvider.macosProperties(const {
       'modelName': 'Unknown Model',
