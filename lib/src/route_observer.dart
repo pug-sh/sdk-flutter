@@ -22,28 +22,29 @@ class PugRouteObserver extends NavigatorObserver {
   }
 
   /// `didChangeTop` is not called when the stack empties, so the two callbacks
-  /// that can empty it report the null route themselves. Whether it emptied is
-  /// tracked by counting: a null `previousRoute` only means the *bottom-most*
-  /// route went, which routinely happens with routes still on screen — popping
-  /// the last of them, or `pushAndRemoveUntil`, which clears the stack from the
-  /// bottom up under a route it has already pushed.
+  /// that can empty it report the null route themselves.
+  ///
+  /// For `didPop` a null `previousRoute` is exact: `pop` takes the topmost
+  /// route, so nothing below it means nothing is left.
   @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
-      _onRouteRemoved(route);
-
-  @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
-      _onRouteRemoved(route);
-
-  void _onRouteRemoved(Route<dynamic> route) {
-    // Already zero means this observer was attached to a Navigator that had
-    // routes before it could count them; reporting an empty stack from that is
-    // a guess, so stay quiet until a push gives a real baseline.
-    if (_depth == 0) {
-      return;
-    }
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     _depth -= 1;
-    if (_depth == 0) {
+    if (previousRoute == null) {
+      _onRouteChanged(null, _routeName(route));
+    }
+  }
+
+  /// For `didRemove` a null `previousRoute` is not enough: `Navigator` passes
+  /// null whenever the *bottom-most* route goes, which leaves the routes above
+  /// it on screen — `pushAndRemoveUntil` clears the stack from the bottom up
+  /// under a route it has already pushed. So it is confirmed against the route
+  /// count, which goes negative rather than reaching zero when this observer
+  /// was attached to a Navigator that already had routes. An unknown baseline
+  /// therefore stays quiet instead of reporting an empty stack that isn't.
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _depth -= 1;
+    if (previousRoute == null && _depth == 0) {
       _onRouteChanged(null, _routeName(route));
     }
   }

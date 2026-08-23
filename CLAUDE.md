@@ -221,9 +221,9 @@ Flutter/mobile-specific parity:
 
 - App lifecycle auto tracking for `app_open` and `app_close`.
 - `SharedPreferencesPugStorage` via async `Pug.init(...)`.
-- Automatic campaign capture from app/deep links, through an injected `PugLinkProvider` (no adapter ships; see `### Not On The Public Surface`).
 
 Remaining gaps:
 
 - No concrete push provider ships with the SDK. The push API is provider-neutral and the notification tracking helpers are implemented; an FCM (or other) token provider can be packaged as a separate add-on.
-- No browser-style auto trackers for click, scroll, forms, rage click, dead click, page title, or UA client hints. Page `$url`/`$referrer` are attached to every event from `PugRouteObserver` route changes. UTM-style campaign capture is implemented from app/deep links, but this SDK does not capture install referrer/deferred attribution automatically.
+- Campaign capture is **built but not available**. `CampaignTracker` implements app/deep-link capture and replay, but `PugOptions` exposes no way to configure it, `PugClient.start()` never calls `CampaignTracker.start()`, and no `PugLinkProvider` adapter ships — so no `$utm*`/click-id auto-properties are attached. See `### Not On The Public Surface` for what re-enabling takes.
+- No browser-style auto trackers for click, scroll, forms, rage click, dead click, page title, or UA client hints. Page `$url`/`$referrer` are attached to every event from `PugRouteObserver` route changes. This SDK does not capture install referrer/deferred attribution automatically either.

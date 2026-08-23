@@ -175,7 +175,10 @@ class PugClient with WidgetsBindingObserver {
       }
       _lifecycleBinding?.addObserver(this);
       final key = _storageOwnerKey;
-      _storageOwners[key]?._releaseStorage();
+      final previousOwner = _storageOwners[key];
+      if (previousOwner != null && !identical(previousOwner, this)) {
+        previousOwner._releaseStorage();
+      }
       _storageOwners[key] = this;
       _ownsStorage = true;
       _started = true;

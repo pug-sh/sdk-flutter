@@ -316,6 +316,30 @@ void main() {
     await client.destroy();
   });
 
+  test('an observer attached mid-stack reports no empty stack', () {
+    final client = testClient(autoPageViews: true);
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    addTearDown(() => PugRouteObserver.onRouteChanged = null);
+
+    final observer = PugRouteObserver();
+    final home = NamedRoute('/');
+    final detail = NamedRoute('/b');
+
+    // '/' was already on the stack when this observer was attached, so its
+    // push was never counted. Popping '/b' must not look like an empty stack.
+    observer.didPush(detail, home);
+    observer.didChangeTop(detail, home);
+    observer.didPop(detail, home);
+    observer.didChangeTop(home, detail);
+
+    final events = client.queue.peekUnlocked();
+    expect(events.map((event) => event.kind), everyElement('screen_view'));
+    expect(events.last.customProperties['screenName']?.value, '/');
+    // A spurious null transition between the pop and didChangeTop would land
+    // here as a null referrer.
+    expect(events.last.autoProperties[r'$referrer']?.value, '/b');
+  });
+
   testWidgets('replacing the whole route stack keeps the referrer', (
     tester,
   ) async {
