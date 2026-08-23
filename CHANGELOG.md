@@ -17,6 +17,17 @@
   `notification_dismissed` event kinds are unaffected: they are ordinary events
   on the live events endpoint, still reachable through `Pug.track.*` and
   `PugEventNames`.
+* Add automatic `app_install` and `app_update` tracking, controlled by the new
+  `PugOptions.autoInstallEvents` (default on, independent of `autoTrack`).
+  `app_install` is emitted on the first launch the SDK sees on a device, and
+  `app_update` — carrying `previousVersion` — on the first launch after the app
+  version changes. Detection compares the `$appVersion` auto-property against a
+  version persisted under `__pug_<projectId>_last_version__`, so it is inactive
+  when a custom `PugAutoPropertyProvider` supplies no app version. The install
+  event is suppressed when other Pug state is already on the device, so adding
+  this SDK to an app that already used Pug does not report its existing users as
+  new installs. `Pug.destroy()` clears that state, so a destroy/re-init cycle
+  does look like a fresh install.
 
 ## 0.0.4
 
