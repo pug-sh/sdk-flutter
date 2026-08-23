@@ -80,7 +80,7 @@ Campaign capture is implemented in `CampaignTracker` — it reads the initial ap
 
 Three things are load-bearing:
 
-- `check()` runs in `start()` *before* `AppLifecycleTracker.syncInitialState` — so a launch install/update precedes the launch `app_open` — and before anything else in `start()` writes a project-scoped key. The install branch only fires when no *other* key in `PugStorageKeys.all` exists; without that probe, adding this SDK to an app that already used Pug would report every existing user as a new install. Its own state would trip that probe if it ran later.
+- `check()` runs in `start()` *before* `AppLifecycleTracker.syncInitialState` — so a launch install/update precedes the launch `app_open` — and before anything else in `start()` writes a project-scoped key. The install branch only fires when no key in `PugStorageKeys.priorActivity` exists; without that probe, adding this SDK to an app that already used Pug would report every existing user as a new install. Its own state would trip that probe if it ran later. `priorActivity` is `all` minus `consent` and `lastVersion`: consent is a user preference rather than tracking activity, and it is the one key `destroy()` keeps, so counting it would suppress the `app_install` of an install that was denied consent at first launch and granted it later.
 - The stored version only advances when the capture callback reports the event was really captured, the same contract `AppLifecycleTracker` uses: a consent-denied `app_install` is retried on the next launch instead of being lost for good.
 - `destroy()` purges `last_version` alongside identity, campaign, and queue (owning clients only), matching the cross-SDK rule that teardown purges every project key except consent. A destroy/re-init cycle therefore does look like a fresh install — defensible, in that no prior state is left, but a reason not to call `destroy()` routinely.
 
@@ -105,7 +105,7 @@ State keys are project-namespaced and defined once, in `PugStorageKeys` (`lib/sr
 - `__pug_<projectId>_consent__` (only when `trackingConsent.persist` is set)
 - `__pug_<projectId>_last_version__`
 
-`PugStorageKeys.all` lists them all. It is what `InstallTracker` probes to tell a fresh install from an app that already had Pug on it, so a key added there but not to the purge in `destroy()` (or the reverse) silently changes install detection.
+`PugStorageKeys.all` lists them all, and `PugStorageKeys.priorActivity` narrows that to the keys whose presence proves prior tracking (everything but `consent` and `lastVersion`). `InstallTracker` probes the latter to tell a fresh install from an app that already had Pug on it, so a key added to `all` but not to the purge in `destroy()` (or the reverse) silently changes install detection.
 
 ### Queue
 

@@ -113,6 +113,32 @@ void main() {
       ]);
     });
 
+    test('persisted consent alone does not suppress the install', () {
+      const config = TrackingConsentConfig(
+        defaultConsent: TrackingConsent.denied,
+        persist: true,
+      );
+      final storage = MemoryPugStorage();
+      final denied = launch(
+        storage: storage,
+        appVersion: '1.0.0',
+        consent: config,
+      );
+      // Opting in writes the consent key, and that key deliberately outlives
+      // destroy() — so it must not read as prior tracking activity.
+      denied.optInTracking();
+
+      final granted = launch(
+        storage: storage,
+        appVersion: '1.0.0',
+        consent: config,
+      );
+
+      expect(granted.queue.peekUnlocked().map((event) => event.kind), [
+        'app_install',
+      ]);
+    });
+
     test('a downgrade is still an update', () {
       final storage = MemoryPugStorage()..setString(_lastVersionKey, '1.1.0');
       final client = launch(storage: storage, appVersion: '1.0.0');

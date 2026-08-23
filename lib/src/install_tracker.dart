@@ -78,7 +78,6 @@ class InstallTracker {
     }
   }
 
-  bool _hasPriorState() => _keys.all
-      .where((key) => key != _keys.lastVersion)
-      .any((key) => _storage.getString(key) != null);
+  bool _hasPriorState() =>
+      _keys.priorActivity.any((key) => _storage.getString(key) != null);
 }
