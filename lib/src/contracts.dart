@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 
 import 'events.dart';
-import 'push_models.dart';
 
 abstract interface class PugLogger {
   void debug(String message);
@@ -146,5 +145,4 @@ abstract interface class PugTransport {
   Future<void> send(Event event);
   Future<void> sendBatch(List<Event> events);
   Future<void> identify(IdentifyRequest request);
-  Future<void> subscribeDevice(PushSubscription subscription);
 }

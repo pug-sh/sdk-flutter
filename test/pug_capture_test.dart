@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter/pug_flutter.dart';
+
+import 'package:pug_flutter/src/push.dart';
 
 import 'test_support.dart';
 
@@ -256,14 +260,145 @@ void main() {
     addTearDown(() => PugRouteObserver.onRouteChanged = null);
 
     final observer = PugRouteObserver();
-    observer.didPush(NamedRoute('/home'), NamedRoute('/'));
-    observer.didPush(NamedRoute('/profile'), NamedRoute('/home'));
+    observer.didChangeTop(NamedRoute('/home'), NamedRoute('/'));
+    observer.didChangeTop(NamedRoute('/profile'), NamedRoute('/home'));
 
     final events = client.queue.peekUnlocked();
     expect(events.map((event) => event.kind), everyElement('screen_view'));
     expect(events.last.customProperties['screenName']?.value, '/profile');
     expect(events.last.autoProperties[r'$url']?.value, '/profile');
     expect(events.last.autoProperties[r'$referrer']?.value, '/home');
+  });
+
+  testWidgets('removing a route below the top leaves the tracked route alone', (
+    tester,
+  ) async {
+    final client = testClient(autoPageViews: true);
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    addTearDown(() => PugRouteObserver.onRouteChanged = null);
+
+    Route<void> page(String name) => PageRouteBuilder<void>(
+      settings: RouteSettings(name: name),
+      pageBuilder:
+          (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+    );
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      WidgetsApp(
+        navigatorKey: navigatorKey,
+        navigatorObservers: [PugRouteObserver()],
+        color: const Color(0xFF000000),
+        onGenerateRoute: (settings) => page(settings.name ?? '/'),
+      ),
+    );
+
+    final navigator = navigatorKey.currentState!;
+    final middle = page('/b');
+    unawaited(navigator.push(middle));
+    await tester.pumpAndSettle();
+    unawaited(navigator.push(page('/c')));
+    await tester.pumpAndSettle();
+
+    final before = client.queue.peekUnlocked().length;
+    // `didRemove` reports the route *below* the removed one, so acting on it
+    // here would report '/' while '/c' is still on screen.
+    navigator.removeRoute(middle);
+    await tester.pumpAndSettle();
+
+    final events = client.queue.peekUnlocked();
+    expect(events.length, before);
+    expect(events.last.customProperties['screenName']?.value, '/c');
+    expect(events.last.autoProperties[r'$url']?.value, '/c');
+
+    // testWidgets fails the test on a pending timer, and the tear-down destroy
+    // that cancels the flush timer runs after that check.
+    await client.destroy();
+  });
+
+  test('an observer attached mid-stack reports no empty stack', () {
+    final client = testClient(autoPageViews: true);
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    addTearDown(() => PugRouteObserver.onRouteChanged = null);
+
+    final observer = PugRouteObserver();
+    final home = NamedRoute('/');
+    final detail = NamedRoute('/b');
+
+    // '/' was already on the stack when this observer was attached, so its
+    // push was never counted. Popping '/b' must not look like an empty stack.
+    observer.didPush(detail, home);
+    observer.didChangeTop(detail, home);
+    observer.didPop(detail, home);
+    observer.didChangeTop(home, detail);
+
+    final events = client.queue.peekUnlocked();
+    expect(events.map((event) => event.kind), everyElement('screen_view'));
+    expect(events.last.customProperties['screenName']?.value, '/');
+    // A spurious null transition between the pop and didChangeTop would land
+    // here as a null referrer.
+    expect(events.last.autoProperties[r'$referrer']?.value, '/b');
+  });
+
+  testWidgets('replacing the whole route stack keeps the referrer', (
+    tester,
+  ) async {
+    final client = testClient(autoPageViews: true);
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    addTearDown(() => PugRouteObserver.onRouteChanged = null);
+
+    Route<void> page(String name) => PageRouteBuilder<void>(
+      settings: RouteSettings(name: name),
+      pageBuilder:
+          (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+    );
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      WidgetsApp(
+        navigatorKey: navigatorKey,
+        navigatorObservers: [PugRouteObserver()],
+        color: const Color(0xFF000000),
+        onGenerateRoute: (settings) => page(settings.name ?? '/'),
+      ),
+    );
+
+    final navigator = navigatorKey.currentState!;
+    unawaited(navigator.push(page('/b')));
+    await tester.pumpAndSettle();
+
+    // Removing the bottom-most route hands `didRemove` a null previousRoute
+    // while another route is still on screen; acting on it would strand the
+    // tracked route at null.
+    unawaited(navigator.pushAndRemoveUntil(page('/login'), (route) => false));
+    await tester.pumpAndSettle();
+
+    final events = client.queue.peekUnlocked();
+    expect(events.last.customProperties['screenName']?.value, '/login');
+    expect(events.last.autoProperties[r'$url']?.value, '/login');
+    expect(events.last.autoProperties[r'$referrer']?.value, '/b');
+
+    await client.destroy();
+  });
+
+  test('inactive flushes without emitting app_close', () async {
+    final transport = FakeTransport();
+    final client = testClient(transport: transport, autoTrack: true);
+
+    client.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    client.track('one');
+    client.didChangeAppLifecycleState(AppLifecycleState.inactive);
+    await Future<void>.delayed(Duration.zero);
+
+    // An incoming call or the app switcher is not an app_close. It still
+    // flushes: on desktop the embedders send only resumed/inactive/hidden, so
+    // `inactive` can be the last state before the process exits.
+    expect(transport.sent, isEmpty);
+    expect(transport.batches.single.map((event) => event.kind), [
+      'app_open',
+      'one',
+    ]);
+    expect(client.queue.peekUnlocked(), isEmpty);
   });
 
   test('notification received and dismissed are sent immediately', () async {

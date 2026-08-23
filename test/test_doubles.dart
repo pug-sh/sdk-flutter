@@ -4,6 +4,10 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter/pug_flutter.dart';
+// Campaign, push, and device registration are built but not on the public
+// surface: the backend does not accept them yet. Reach them through src/.
+import 'package:pug_flutter/src/campaign.dart';
+import 'package:pug_flutter/src/push_models.dart';
 
 class CapturingLogger implements PugLogger {
   final List<String> warnings = <String>[];
@@ -26,7 +30,7 @@ class CapturingLogger implements PugLogger {
   }
 }
 
-class FakeTransport implements PugTransport {
+class FakeTransport implements PugTransport, PugDeviceTransport {
   final List<Event> sent = <Event>[];
   final List<List<Event>> batches = <List<Event>>[];
   final List<IdentifyRequest> identifies = <IdentifyRequest>[];
@@ -69,6 +73,24 @@ class FakeTransport implements PugTransport {
   }
 }
 
+/// A [FakeTransport] whose sends hang until [gate] completes, so a test can
+/// hold a flush or an identify in flight across a `reset()` or `destroy()`.
+class GatedTransport extends FakeTransport {
+  final Completer<void> gate = Completer<void>();
+
+  @override
+  Future<void> sendBatch(List<Event> events) async {
+    await gate.future;
+    return super.sendBatch(events);
+  }
+
+  @override
+  Future<void> identify(IdentifyRequest request) async {
+    await gate.future;
+    return super.identify(request);
+  }
+}
+
 class FakePushProvider implements PushProvider {
   FakePushProvider({this.token = 'token-1', this.deleteError});
 
@@ -106,10 +128,8 @@ PugClient testClient({
   MemoryPugStorage? storage,
   PugLogger? logger,
   PugAutoPropertyProvider? autoPropertyProvider,
-  PugLinkProvider? linkProvider,
   bool autoTrack = false,
   bool autoPageViews = false,
-  bool autoCaptureCampaigns = false,
   WidgetsBinding? lifecycleBinding,
 }) {
   final client = PugClient(
@@ -121,10 +141,8 @@ PugClient testClient({
       logger: logger ?? const NoopPugLogger(),
       autoPropertyProvider:
           autoPropertyProvider ?? const PugStaticAutoPropertyProvider({}),
-      linkProvider: linkProvider,
       autoTrack: autoTrack,
       autoPageViews: autoPageViews,
-      autoCaptureCampaigns: autoCaptureCampaigns,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),
     clock: clock ?? FakeClock(1000),

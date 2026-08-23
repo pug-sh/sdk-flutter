@@ -1,4 +1,5 @@
 import 'contracts.dart';
+import 'state_storage.dart';
 
 /// Whether the SDK is permitted to capture and transmit events.
 enum TrackingConsent { granted, denied }
@@ -9,10 +10,11 @@ enum TrackingConsent { granted, denied }
 /// Mirrors the web SDK's `trackingConsent` option. When consent is
 /// [TrackingConsent.denied], `track()`, the typed `Pug.track.*` methods,
 /// `identify()`, and automatic capture (lifecycle, page views, notifications)
-/// are dropped until `Pug.optInTracking` is called. Automatic campaign /
-/// deep-link capture is not gated: while denied, parameters are still recorded
-/// locally and attached to later events, but nothing is transmitted (event
-/// creation is gated) until a subsequent opt-in.
+/// are dropped until `Pug.optInTracking` is called. Campaign capture is not
+/// started today; when it is re-enabled it is deliberately not gated: while
+/// denied, parameters are still recorded locally and attached to later events,
+/// but nothing is transmitted (event creation is gated) until a subsequent
+/// opt-in.
 class TrackingConsentConfig {
   const TrackingConsentConfig({
     this.defaultConsent = TrackingConsent.granted,
@@ -36,14 +38,14 @@ class TrackingConsentConfig {
 /// `__pug_<projectId>_consent__`.
 class TrackingConsentController {
   TrackingConsentController({
-    required String projectId,
+    required PugStorageKeys keys,
     required PugStorage storage,
     required PugLogger logger,
     TrackingConsentConfig config = const TrackingConsentConfig(),
   }) : _storage = storage,
        _logger = logger,
        _persist = config.persist,
-       _key = '__pug_${projectId}_consent__',
+       _key = keys.consent,
        _status = config.defaultConsent {
     if (_persist) {
       _restore();

@@ -1,5 +1,4 @@
 import 'auto_properties.dart';
-import 'campaign.dart';
 import 'contracts.dart';
 import 'tracking_consent.dart';
 
@@ -12,13 +11,11 @@ class PugOptions {
     this.autoTrack = true,
     this.autoPageViews = true,
     this.dryRun = false,
-    this.autoCaptureCampaigns = true,
     this.trackingConsent = const TrackingConsentConfig(),
     this.logger = const NoopPugLogger(),
     this.storage,
     this.transport,
     this.autoPropertyProvider,
-    this.linkProvider,
   });
 
   final String apiKey;
@@ -28,13 +25,11 @@ class PugOptions {
   final bool autoTrack;
   final bool autoPageViews;
   final bool dryRun;
-  final bool autoCaptureCampaigns;
   final TrackingConsentConfig trackingConsent;
   final PugLogger logger;
   final PugStorage? storage;
   final PugTransport? transport;
   final PugAutoPropertyProvider? autoPropertyProvider;
-  final PugLinkProvider? linkProvider;
 
   PugOptions copyWith({
     String? apiKey,
@@ -44,13 +39,11 @@ class PugOptions {
     bool? autoTrack,
     bool? autoPageViews,
     bool? dryRun,
-    bool? autoCaptureCampaigns,
     TrackingConsentConfig? trackingConsent,
     PugLogger? logger,
     PugStorage? storage,
     PugTransport? transport,
     PugAutoPropertyProvider? autoPropertyProvider,
-    PugLinkProvider? linkProvider,
   }) {
     return PugOptions(
       apiKey: apiKey ?? this.apiKey,
@@ -60,13 +53,11 @@ class PugOptions {
       autoTrack: autoTrack ?? this.autoTrack,
       autoPageViews: autoPageViews ?? this.autoPageViews,
       dryRun: dryRun ?? this.dryRun,
-      autoCaptureCampaigns: autoCaptureCampaigns ?? this.autoCaptureCampaigns,
       trackingConsent: trackingConsent ?? this.trackingConsent,
       logger: logger ?? this.logger,
       storage: storage ?? this.storage,
       transport: transport ?? this.transport,
       autoPropertyProvider: autoPropertyProvider ?? this.autoPropertyProvider,
-      linkProvider: linkProvider ?? this.linkProvider,
     );
   }
 }

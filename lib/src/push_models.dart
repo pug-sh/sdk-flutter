@@ -18,6 +18,13 @@ class PushSubscription {
   final Map<String, Object?> properties;
 }
 
+/// Device registration is deliberately not part of `PugTransport`: the devices
+/// endpoint is not live yet, so a custom transport is not required to implement
+/// it. `ConnectPugTransport` still does.
+abstract interface class PugDeviceTransport {
+  Future<void> subscribeDevice(PushSubscription subscription);
+}
+
 abstract interface class PushProvider {
   String get provider;
   String get platform;

@@ -21,8 +21,11 @@ class PugEventQueue {
   final int maxQueueSize;
   final List<Event> _unlocked = <Event>[];
   List<Event> _locked = <Event>[];
+  bool _detached = false;
 
   int get size => _unlocked.length;
+
+  int get totalSize => _unlocked.length + _locked.length;
 
   void push(Event event) {
     if (_unlocked.length + _locked.length >= maxQueueSize) {
@@ -67,6 +70,12 @@ class PugEventQueue {
     _persist();
   }
 
+  /// Stops writing to storage: another owner holds this key now, and every
+  /// [_persist] from here on would overwrite what it has written.
+  void detachStorage() {
+    _detached = true;
+  }
+
   List<Event> _readPersisted() {
     final raw = _storage.getString(key);
     if (raw == null) {
@@ -91,6 +100,9 @@ class PugEventQueue {
   }
 
   void _persist() {
+    if (_detached) {
+      return;
+    }
     final all = <Event>[..._locked, ..._unlocked];
     _storage.setString(
       key,

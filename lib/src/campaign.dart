@@ -1,27 +1,13 @@
 import 'dart:async';
 
-import 'package:app_links/app_links.dart';
-
+/// No concrete provider ships with the SDK. The `app_links` adapter was dropped
+/// along with the dependency while campaign capture is off the public surface —
+/// nothing could reach it, and every host app paid for its native plugin
+/// registration. Re-enabling capture means supplying one here again.
 abstract interface class PugLinkProvider {
   Future<Uri?> initialUri();
   Stream<Uri> get uriStream;
   void dispose();
-}
-
-class AppLinksPugLinkProvider implements PugLinkProvider {
-  AppLinksPugLinkProvider({AppLinks? appLinks})
-    : _appLinks = appLinks ?? AppLinks();
-
-  final AppLinks _appLinks;
-
-  @override
-  Future<Uri?> initialUri() => _appLinks.getInitialLink();
-
-  @override
-  Stream<Uri> get uriStream => _appLinks.uriLinkStream;
-
-  @override
-  void dispose() {}
 }
 
 Map<String, Object?> campaignPropertiesFromUri(Uri uri) {
