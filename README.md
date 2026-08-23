@@ -365,8 +365,10 @@ often fire while the app is backgrounded, and a queued event is lost when the OS
 suspends the process before the next flush.
 
 ```dart
+final campaignId = message.data['campaignId']?.toString() ?? '';
+
 Pug.track.notificationClicked(
-  campaignId: message.data['campaignId'] as String? ?? '(unknown)',
+  campaignId: campaignId.isEmpty ? '(unknown)' : campaignId,
   options: const TrackOptions(immediate: true),
 );
 ```
