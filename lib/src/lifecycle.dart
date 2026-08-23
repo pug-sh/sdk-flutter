@@ -8,14 +8,18 @@ import 'package:flutter/widgets.dart' show AppLifecycleState;
 class AppLifecycleTracker {
   AppLifecycleTracker({
     required bool autoTrack,
-    required void Function(String kind, {required bool immediate}) capture,
+    required bool Function(String kind, {required bool immediate}) capture,
     required void Function() onBackground,
   }) : _autoTrack = autoTrack,
        _capture = capture,
        _onBackground = onBackground;
 
   final bool _autoTrack;
-  final void Function(String kind, {required bool immediate}) _capture;
+
+  /// Returns whether the event was actually captured. The foreground flag is
+  /// only flipped when it was, so a consent gate that drops an `app_open`
+  /// cannot leave an unpaired `app_close` behind.
+  final bool Function(String kind, {required bool immediate}) _capture;
   final void Function() _onBackground;
   bool _isForeground = false;
 
@@ -25,33 +29,41 @@ class AppLifecycleTracker {
   /// before this call, or the launch `app_open` misses the launch link's
   /// campaign auto-properties.
   void syncInitialState(AppLifecycleState? state) {
-    if (_autoTrack && state == AppLifecycleState.resumed) {
+    if (_autoTrack &&
+        state == AppLifecycleState.resumed &&
+        _capture('app_open', immediate: false)) {
       _isForeground = true;
-      _capture('app_open', immediate: false);
     }
   }
 
   void handleStateChange(AppLifecycleState state) {
-    switch (state) {
-      case AppLifecycleState.resumed:
-        if (_autoTrack && !_isForeground) {
-          _isForeground = true;
-          _capture('app_open', immediate: false);
-        }
-      // `inactive` is a transient loss of input focus with the app still
-      // visible — an incoming call, the app switcher, a control-centre swipe —
-      // so it is not a backgrounding. Real backgrounding always passes through
-      // `hidden`/`paused` before the OS suspends the process.
-      case AppLifecycleState.inactive:
-        break;
-      case AppLifecycleState.hidden:
-      case AppLifecycleState.paused:
-      case AppLifecycleState.detached:
-        if (_autoTrack && _isForeground) {
-          _isForeground = false;
-          _capture('app_close', immediate: true);
-        }
-        _onBackground();
+    if (state == AppLifecycleState.resumed) {
+      if (_autoTrack &&
+          !_isForeground &&
+          _capture('app_open', immediate: false)) {
+        _isForeground = true;
+      }
+      return;
     }
+    // Deliberately not a switch over AppLifecycleState: an exhaustive one
+    // becomes a compile error the next time Flutter adds a member, inside a
+    // package host apps cannot patch.
+    final backgrounded =
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached;
+    if (backgrounded &&
+        _autoTrack &&
+        _isForeground &&
+        _capture('app_close', immediate: true)) {
+      _isForeground = false;
+    }
+    // Everything that is not `resumed` flushes, `inactive` included. It emits
+    // no `app_close` — it is a transient loss of input focus with the app still
+    // visible (an incoming call, the app switcher, a control-centre swipe) —
+    // but the desktop embedders send only resumed/inactive/hidden, never
+    // paused or detached, so an app quit from an unfocused but visible window
+    // would otherwise get no send attempt at all.
+    _onBackground();
   }
 }

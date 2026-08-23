@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter/pug_flutter.dart';
+import 'package:pug_flutter/src/connect_transport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_support.dart';
@@ -251,10 +252,11 @@ void main() {
   });
 
   test(
-    'destroy does not purge state written by a replacement client',
+    'destroy neither purges nor re-delivers state owned by a replacement',
     () async {
       final storage = MemoryPugStorage();
-      final first = testClient(storage: storage);
+      final outgoing = FakeTransport();
+      final first = testClient(storage: storage, transport: outgoing);
       first.track('one');
 
       // destroy() awaits a final flush, so a follow-up init() can start a
@@ -264,12 +266,70 @@ void main() {
       second.track('two');
       await teardown;
 
-      expect(storage.getString('__pug_project_queue__'), isNotNull);
+      // The replacement adopted 'one' from storage when it was constructed, so
+      // the outgoing client must neither send it again nor write over what the
+      // replacement has persisted since.
+      expect(outgoing.batches, isEmpty);
+      expect(readQueueKinds(storage), ['one', 'two']);
       expect(readDeviceId(storage), isNotNull);
       expect(readSession(storage), isNotEmpty);
+      expect(second.queue.peekUnlocked().map((event) => event.kind), [
+        'one',
+        'two',
+      ]);
+    },
+  );
+
+  test('destroy does not close a transport the host injected', () async {
+    final transport = CloseSpyTransport();
+    final client = PugClient(
+      projectId: 'project',
+      options: PugOptions(
+        apiKey: 'key',
+        transport: transport,
+        storage: MemoryPugStorage(),
+        autoPropertyProvider: const PugStaticAutoPropertyProvider({}),
+        batch: const BatchConfig(maxWaitMs: 60000),
+      ),
+    );
+    await client.start();
+    await client.destroy();
+
+    // A host may hand the same transport to a follow-up init(); closing its
+    // http.Client would make every later send fail as "Client is already
+    // closed", which the retry policy treats as transient and so retries
+    // forever.
+    expect(transport.closed, isFalse);
+  });
+
+  test(
+    'a flush in flight when destroy runs cannot resurrect the queue',
+    () async {
+      final storage = MemoryPugStorage();
+      final logger = CapturingLogger();
+      final transport =
+          GatedTransport()
+            ..batchError = const PugTransportException(
+              'retry',
+              permanent: false,
+            );
+      final client = testClient(
+        transport: transport,
+        storage: storage,
+        logger: logger,
+      );
+      client.track('one');
+
+      final flushing = client.flush();
+      final teardown = client.destroy();
+      transport.gate.complete();
+      await flushing;
+      await teardown;
+
+      expect(storage.getString('__pug_project_queue__'), isNull);
       expect(
-        second.queue.peekUnlocked().map((event) => event.kind),
-        contains('two'),
+        logger.warnings,
+        contains(contains('discarded 1 undelivered event(s)')),
       );
     },
   );
@@ -334,4 +394,17 @@ void main() {
     // The underlying error is observed, not swallowed.
     expect(logger.debugs, isNotEmpty);
   });
+}
+
+class CloseSpyTransport extends ConnectPugTransport {
+  CloseSpyTransport()
+    : super(endpoint: 'https://example.invalid', apiKey: 'key');
+
+  bool closed = false;
+
+  @override
+  void close() {
+    closed = true;
+    super.close();
+  }
 }

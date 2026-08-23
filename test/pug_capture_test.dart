@@ -316,7 +316,48 @@ void main() {
     await client.destroy();
   });
 
-  test('inactive is not treated as backgrounding', () async {
+  testWidgets('replacing the whole route stack keeps the referrer', (
+    tester,
+  ) async {
+    final client = testClient(autoPageViews: true);
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    addTearDown(() => PugRouteObserver.onRouteChanged = null);
+
+    Route<void> page(String name) => PageRouteBuilder<void>(
+      settings: RouteSettings(name: name),
+      pageBuilder:
+          (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+    );
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      WidgetsApp(
+        navigatorKey: navigatorKey,
+        navigatorObservers: [PugRouteObserver()],
+        color: const Color(0xFF000000),
+        onGenerateRoute: (settings) => page(settings.name ?? '/'),
+      ),
+    );
+
+    final navigator = navigatorKey.currentState!;
+    unawaited(navigator.push(page('/b')));
+    await tester.pumpAndSettle();
+
+    // Removing the bottom-most route hands `didRemove` a null previousRoute
+    // while another route is still on screen; acting on it would strand the
+    // tracked route at null.
+    unawaited(navigator.pushAndRemoveUntil(page('/login'), (route) => false));
+    await tester.pumpAndSettle();
+
+    final events = client.queue.peekUnlocked();
+    expect(events.last.customProperties['screenName']?.value, '/login');
+    expect(events.last.autoProperties[r'$url']?.value, '/login');
+    expect(events.last.autoProperties[r'$referrer']?.value, '/b');
+
+    await client.destroy();
+  });
+
+  test('inactive flushes without emitting app_close', () async {
     final transport = FakeTransport();
     final client = testClient(transport: transport, autoTrack: true);
 
@@ -325,14 +366,15 @@ void main() {
     client.didChangeAppLifecycleState(AppLifecycleState.inactive);
     await Future<void>.delayed(Duration.zero);
 
-    // An incoming call or the app switcher is not an app_close, and must not
-    // trigger the backgrounding flush either.
-    expect(transport.batches, isEmpty);
+    // An incoming call or the app switcher is not an app_close. It still
+    // flushes: on desktop the embedders send only resumed/inactive/hidden, so
+    // `inactive` can be the last state before the process exits.
     expect(transport.sent, isEmpty);
-    expect(client.queue.peekUnlocked().map((event) => event.kind), [
+    expect(transport.batches.single.map((event) => event.kind), [
       'app_open',
       'one',
     ]);
+    expect(client.queue.peekUnlocked(), isEmpty);
   });
 
   test('notification received and dismissed are sent immediately', () async {

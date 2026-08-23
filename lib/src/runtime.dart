@@ -40,7 +40,7 @@ class PugClient with WidgetsBindingObserver {
        _storage = SafePugStorage(
          primary: options.storage,
          fallback: MemoryPugStorage(),
-         logger: options.logger,
+         logger: SafePugLogger(options.logger),
        ) {
     _transport =
         _options.transport ??
@@ -59,6 +59,7 @@ class PugClient with WidgetsBindingObserver {
       logger: _options.logger,
       batch: _options.batch,
       dryRun: _options.dryRun,
+      ownsTransport: _options.transport == null,
     );
     _consent = TrackingConsentController(
       keys: _keys,
@@ -91,9 +92,16 @@ class PugClient with WidgetsBindingObserver {
     );
     _lifecycle = AppLifecycleTracker(
       autoTrack: _options.autoTrack,
-      capture:
-          (kind, {required immediate}) =>
-              track(kind, options: TrackOptions(immediate: immediate)),
+      capture: (kind, {required immediate}) {
+        // Reported back so the tracker's foreground flag only advances when the
+        // event was really captured: a consent-denied app_open would otherwise
+        // leave an unpaired app_close behind once consent is granted.
+        if (_disposed || !_consent.isGranted) {
+          return false;
+        }
+        track(kind, options: TrackOptions(immediate: immediate));
+        return true;
+      },
       onBackground: () => unawaited(_dispatcher.flush()),
     );
   }
@@ -126,15 +134,25 @@ class PugClient with WidgetsBindingObserver {
   late final AppLifecycleTracker _lifecycle;
   bool _disposed = false;
   bool _started = false;
+  bool _ownsStorage = false;
 
-  /// The client that currently owns each project's storage namespace.
+  /// The client that currently owns each storage namespace.
   ///
   /// `Pug.destroy()` detaches the singleton synchronously but tears down
   /// asynchronously, so a follow-up `init()` can start a replacement client on
   /// the same keys while the outgoing one is still awaiting its final flush.
   /// The purge in [destroy] consults this so it cannot delete the
   /// replacement's identity, consent, or queue state.
-  static final Map<String, PugClient> _storageOwners = <String, PugClient>{};
+  static final Map<(String, Object), PugClient> _storageOwners =
+      <(String, Object), PugClient>{};
+
+  /// Keyed by store as well as project: two clients on the same project but
+  /// different [PugStorage] instances share no namespace, and a null primary
+  /// means this client's own memory fallback, which nothing else holds.
+  (String, Object) get _storageOwnerKey => (
+    projectId,
+    _options.storage ?? _storage,
+  );
 
   /// Exposed so `Pug.logger` can surface the configured logger to callers
   /// (notably `TrackNamespace`) post-init. Safe to call before `start()`.
@@ -156,7 +174,10 @@ class PugClient with WidgetsBindingObserver {
         return;
       }
       _lifecycleBinding?.addObserver(this);
-      _storageOwners[projectId] = this;
+      final key = _storageOwnerKey;
+      _storageOwners[key]?._releaseStorage();
+      _storageOwners[key] = this;
+      _ownsStorage = true;
       _started = true;
       // Campaign capture is built but not started: the backend does not accept
       // campaign data yet, so the tracker only purges stale state on destroy.
@@ -167,6 +188,14 @@ class PugClient with WidgetsBindingObserver {
     } catch (error, stackTrace) {
       _options.logger.error('Pug start failed.', error, stackTrace);
     }
+  }
+
+  /// Called on the outgoing client when a replacement takes over the same
+  /// namespace, which `Pug.destroy()`/`init()` can do while this client is
+  /// still awaiting its final flush.
+  void _releaseStorage() {
+    _ownsStorage = false;
+    _dispatcher.release();
   }
 
   void track(
@@ -228,6 +257,18 @@ class PugClient with WidgetsBindingObserver {
         traits: sanitizedTraits,
       ),
     );
+    if (_disposed) {
+      return;
+    }
+    // reset() during the await replaced the profile, and destroy() purged it;
+    // writing the captured one back would resurrect the identity the caller
+    // just cleared, old anonymous id and all. The reset wins.
+    if (_identity.resolveProfile().anonymousId != profile.anonymousId) {
+      _options.logger.debug(
+        'Pug identify() completed after a reset; identity left cleared.',
+      );
+      return;
+    }
     _identity.linkExternalId(profile, externalId);
   }
 
@@ -306,41 +347,52 @@ class PugClient with WidgetsBindingObserver {
       );
     } finally {
       // Teardown must run even if the flush above throws, or the client would
-      // leak its lifecycle observer, link subscription, and timers.
-      // Surface undelivered events so the loss is loud, not silent: the final
-      // flush above already logged a misleading "will be retried" on a
-      // transient failure, but the queue is about to be purged below.
-      final undelivered = _dispatcher.pending;
-      if (undelivered > 0) {
-        _options.logger.warn(
-          'Pug.destroy discarded $undelivered undelivered event(s) that could '
-          'not be flushed.',
+      // leak its lifecycle observer, link subscription, and timers. It is
+      // guarded in turn so a throwing host logger or storage cannot leave the
+      // client half-destroyed.
+      try {
+        // Surface undelivered events so the loss is loud, not silent: the final
+        // flush above already logged a misleading "will be retried" on a
+        // transient failure, but the queue is about to be purged below.
+        final ownsStorage = _ownsStorage;
+        final undelivered = _dispatcher.pending;
+        if (ownsStorage && undelivered > 0) {
+          _options.logger.warn(
+            'Pug.destroy discarded $undelivered undelivered event(s) that '
+            'could not be flushed.',
+          );
+        }
+        // Cancels a timer the final flush may have rescheduled on a transient
+        // failure, then closes the queue and transport.
+        _dispatcher.dispose(persistQueue: ownsStorage);
+        _campaign.dispose();
+        _lifecycleBinding?.removeObserver(this);
+        // Only clear the shared route hook if it still points at this client; a
+        // follow-up init() may have already rebound it to a new client, since
+        // destroy() detaches the singleton synchronously and need not be
+        // awaited.
+        if (PugRouteObserver.onRouteChanged == notifyRouteChanged) {
+          PugRouteObserver.onRouteChanged = null;
+        }
+        if (ownsStorage) {
+          _storageOwners.remove(_storageOwnerKey);
+          _identity.clear();
+          _campaign.clear();
+          _storage.remove(_keys.queue);
+        } else {
+          _options.logger.debug(
+            'Pug.destroy left the stored state for "$projectId" alone: this '
+            'client does not own that storage namespace.',
+          );
+        }
+        _navigation.clear();
+      } catch (error, stackTrace) {
+        _options.logger.error(
+          'Pug destroy teardown failed.',
+          error,
+          stackTrace,
         );
       }
-      // Cancels a timer the final flush may have rescheduled on a transient
-      // failure, then closes the queue and transport.
-      _dispatcher.dispose();
-      _campaign.dispose();
-      _lifecycleBinding?.removeObserver(this);
-      // Only clear the shared route hook if it still points at this client; a
-      // follow-up init() may have already rebound it to a new client, since
-      // destroy() detaches the singleton synchronously and need not be awaited.
-      if (PugRouteObserver.onRouteChanged == notifyRouteChanged) {
-        PugRouteObserver.onRouteChanged = null;
-      }
-      final owner = _storageOwners[projectId];
-      if (owner == null || identical(owner, this)) {
-        _storageOwners.remove(projectId);
-        _identity.clear();
-        _campaign.clear();
-        _storage.remove(_keys.queue);
-      } else {
-        _options.logger.debug(
-          'Pug.destroy kept the stored state for "$projectId": a newer client '
-          'now owns that storage namespace.',
-        );
-      }
-      _navigation.clear();
       _disposed = true;
     }
   }

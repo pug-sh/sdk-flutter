@@ -22,24 +22,35 @@ class EventDispatcher {
     required PugLogger logger,
     required BatchConfig batch,
     required bool dryRun,
+    required bool ownsTransport,
   }) : _queue = queue,
        _transport = transport,
        _logger = logger,
        _batch = batch,
-       _dryRun = dryRun;
+       _dryRun = dryRun,
+       _ownsTransport = ownsTransport;
 
   final PugEventQueue _queue;
   final PugTransport _transport;
   final PugLogger _logger;
   final BatchConfig _batch;
   final bool _dryRun;
+
+  /// False when the host injected the transport: it may be shared with another
+  /// client, and closing its http.Client would wedge that one's sends behind a
+  /// "Client is already closed" error the retry policy treats as transient.
+  final bool _ownsTransport;
   Timer? _flushTimer;
-  bool _isFlushing = false;
+  Future<void> _inFlight = Future<void>.value();
   bool _disposed = false;
+  bool _released = false;
 
   PugEventQueue get queue => _queue;
 
-  int get pending => _queue.size;
+  /// Counts locked events too: a batch that is in flight when `destroy()` runs
+  /// is still undelivered, and reporting only [PugEventQueue.size] would make
+  /// the discarded-events warning miss exactly that case.
+  int get pending => _queue.totalSize;
 
   void dispatch(Event event, {required bool immediate}) {
     if (immediate) {
@@ -54,46 +65,21 @@ class EventDispatcher {
     }
   }
 
-  Future<void> flush() async {
-    if (_isFlushing || _disposed || _dryRun || _queue.size == 0) {
-      return;
+  /// Flushes serially: a call made while a batch is in flight queues behind it
+  /// rather than returning a no-op, so [flushAll] can wait for work it did not
+  /// start.
+  Future<void> flush() {
+    if (_disposed || _released || _dryRun) {
+      return _inFlight;
     }
-    _isFlushing = true;
-    try {
-      final events = _queue.lock(_batch.maxSize);
-      if (events.isEmpty) {
-        return;
-      }
-      await _transport.sendBatch(events);
-      _queue.commit();
-    } on PugTransportException catch (error, stackTrace) {
-      if (error.isPermanent) {
-        _logger.error('Pug dropped a permanently rejected batch.', error);
-        _queue.commit();
-      } else {
-        _logger.warn('Pug batch send failed; it will be retried.');
-        _queue.rollback();
-        scheduleFlush(withBackoff: true);
-      }
-      if (error.stackTrace != null) {
-        _logger.debug(error.stackTrace.toString());
-      }
-      _logger.debug(stackTrace.toString());
-    } catch (error, stackTrace) {
-      _logger.error(
-        'Pug dropped a batch after an unexpected transport failure.',
-        error,
-        stackTrace,
-      );
-      _queue.commit();
-      _logger.debug(stackTrace.toString());
-    } finally {
-      _isFlushing = false;
-    }
+    final next = _inFlight.then((_) => _flushOnce());
+    _inFlight = next;
+    return next;
   }
 
   Future<void> flushAll() async {
-    while (!_disposed && !_dryRun && _queue.size > 0) {
+    await _inFlight;
+    while (!_disposed && !_released && !_dryRun && _queue.size > 0) {
       final before = _queue.size;
       await flush();
       if (_queue.size >= before) {
@@ -118,12 +104,68 @@ class EventDispatcher {
     _flushTimer?.cancel();
   }
 
-  void dispose() {
+  /// Another client has taken over this queue's storage namespace and has
+  /// already adopted its persisted events: stop sending, so they are not
+  /// delivered twice, and stop persisting, so the new owner's writes stand.
+  void release() {
+    _released = true;
+    _queue.detachStorage();
+  }
+
+  /// [persistQueue] is false when the caller no longer owns the storage
+  /// namespace: writing the queue back would clobber a replacement client's.
+  void dispose({bool persistQueue = true}) {
     _disposed = true;
     _flushTimer?.cancel();
-    _queue.dispose();
-    if (_transport case final ConnectPugTransport transport) {
-      transport.close();
+    if (persistQueue) {
+      _queue.dispose();
+    }
+    if (_ownsTransport && _transport is ConnectPugTransport) {
+      _transport.close();
+    }
+  }
+
+  Future<void> _flushOnce() async {
+    if (_disposed || _released || _dryRun || _queue.size == 0) {
+      return;
+    }
+    try {
+      final events = _queue.lock(_batch.maxSize);
+      if (events.isEmpty) {
+        return;
+      }
+      await _transport.sendBatch(events);
+      // destroy() can land across the await; committing or rolling back then
+      // re-persists this batch into a queue key it has already purged.
+      if (_disposed) {
+        return;
+      }
+      _queue.commit();
+    } on PugTransportException catch (error, stackTrace) {
+      if (!_disposed) {
+        if (error.isPermanent) {
+          _logger.error('Pug dropped a permanently rejected batch.', error);
+          _queue.commit();
+        } else {
+          _logger.warn('Pug batch send failed; it will be retried.');
+          _queue.rollback();
+          scheduleFlush(withBackoff: true);
+        }
+      }
+      if (error.stackTrace != null) {
+        _logger.debug(error.stackTrace.toString());
+      }
+      _logger.debug(stackTrace.toString());
+    } catch (error, stackTrace) {
+      _logger.error(
+        'Pug dropped a batch after an unexpected transport failure.',
+        error,
+        stackTrace,
+      );
+      if (!_disposed) {
+        _queue.commit();
+      }
+      _logger.debug(stackTrace.toString());
     }
   }
 
@@ -133,7 +175,7 @@ class EventDispatcher {
     } on PugTransportException catch (error) {
       if (error.isPermanent) {
         _logger.error('Pug dropped a permanently rejected event.', error);
-      } else {
+      } else if (!_disposed && !_released) {
         _queue.push(event);
         scheduleFlush(withBackoff: true);
       }

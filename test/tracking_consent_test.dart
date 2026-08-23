@@ -311,6 +311,30 @@ void main() {
 
       expect(transport.sent.map((e) => e.kind), contains('app_close'));
     });
+
+    test(
+      'consent granted mid-foreground emits no unpaired app_close',
+      () async {
+        final transport = FakeTransport();
+        final client = buildClient(
+          transport: transport,
+          autoTrack: true,
+          consent: denied,
+        );
+        addTearDown(client.destroy);
+
+        // The app_open is dropped, so the tracker must not record a foreground
+        // transition it never emitted — else this background emits a close with
+        // no matching open.
+        client.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        client.optInTracking();
+        client.didChangeAppLifecycleState(AppLifecycleState.paused);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(transport.sent, isEmpty);
+        expect(transport.batches, isEmpty);
+      },
+    );
   });
 
   group('Pug facade before init', () {

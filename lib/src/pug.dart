@@ -19,6 +19,7 @@ class Pug implements TrackContext {
   static Pug get shared => _shared;
 
   PugClient? _client;
+  Future<void>? _pendingTeardown;
 
   PugClient? get clientOrNull => _client;
 
@@ -113,6 +114,14 @@ class Pug implements TrackContext {
     PugLogger logger,
   ) async {
     try {
+      // A destroy() still in flight owns this project's storage namespace, and
+      // may still be sending a batch it has locked. Starting a replacement
+      // before it finishes makes both clients read and write the same persisted
+      // queue, delivering those events twice.
+      final teardown = _pendingTeardown;
+      if (teardown != null) {
+        await teardown;
+      }
       final resolvedOptions = options.copyWith(
         logger: logger,
         storage:
@@ -194,15 +203,26 @@ class Pug implements TrackContext {
     }
   }
 
-  Future<void> destroyClient() async {
+  Future<void> destroyClient() {
     // Detach the singleton synchronously so a follow-up init() works even if the
     // caller does not await the (now async) final flush.
     final client = _client;
     _client = null;
+    if (client == null) {
+      return Future<void>.value();
+    }
+    final teardown = _teardownClient(client);
+    _pendingTeardown = teardown;
+    return teardown;
+  }
+
+  Future<void> _teardownClient(PugClient client) async {
     try {
-      await client?.destroy();
+      await client.destroy();
     } catch (error, stackTrace) {
       _fallbackLogger.error('Pug destroy failed.', error, stackTrace);
+    } finally {
+      _pendingTeardown = null;
     }
   }
 

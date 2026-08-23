@@ -39,6 +39,13 @@ class NavigationTracker {
     if (!_autoPageViews) {
       return;
     }
+    // A null or empty route (the last route being removed) advances route
+    // state but names no destination, so no navigation event is emitted on any
+    // platform — screen_view requires a non-empty screenName and a page_view
+    // with no $url says nothing.
+    if (url == null || url.isEmpty) {
+      return;
+    }
     if (kIsWeb) {
       _capture('page_view', const {});
       return;
@@ -47,9 +54,7 @@ class NavigationTracker {
     // web-only and screen_view covers iOS/Android only. Desktop (macOS,
     // Windows, Linux) and other native targets have no matching kind, so they
     // emit no navigation event — the route state updated above still feeds the
-    // $url/$referrer auto-properties on later events. screen_view also requires
-    // a non-empty screenName, so a null route (e.g. the last route being
-    // removed) updates route state without emitting an event.
+    // $url/$referrer auto-properties on later events.
     final platform = defaultTargetPlatform;
     final emitsScreenView =
         platform == TargetPlatform.iOS || platform == TargetPlatform.android;
@@ -57,9 +62,7 @@ class NavigationTracker {
       _warnUnsupportedNavPlatformOnce(platform, url);
       return;
     }
-    if (url != null && url.isNotEmpty) {
-      _capture('screen_view', {'screenName': url});
-    }
+    _capture('screen_view', {'screenName': url});
   }
 
   void clear() {

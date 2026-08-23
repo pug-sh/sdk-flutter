@@ -73,6 +73,24 @@ class FakeTransport implements PugTransport, PugDeviceTransport {
   }
 }
 
+/// A [FakeTransport] whose sends hang until [gate] completes, so a test can
+/// hold a flush or an identify in flight across a `reset()` or `destroy()`.
+class GatedTransport extends FakeTransport {
+  final Completer<void> gate = Completer<void>();
+
+  @override
+  Future<void> sendBatch(List<Event> events) async {
+    await gate.future;
+    return super.sendBatch(events);
+  }
+
+  @override
+  Future<void> identify(IdentifyRequest request) async {
+    await gate.future;
+    return super.identify(request);
+  }
+}
+
 class FakePushProvider implements PushProvider {
   FakePushProvider({this.token = 'token-1', this.deleteError});
 

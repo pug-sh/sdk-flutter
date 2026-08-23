@@ -74,6 +74,17 @@ Map<String, Object?> _readJsonMap(MemoryPugStorage storage, String key) {
 String? readDeviceId(MemoryPugStorage storage) =>
     storage.getString('__pug_project_device_id__');
 
+List<String> readQueueKinds(MemoryPugStorage storage) {
+  final raw = storage.getString('__pug_project_queue__');
+  if (raw == null) {
+    return const [];
+  }
+  final decoded = jsonDecode(raw) as List<Object?>;
+  return decoded
+      .map((event) => (event as Map<Object?, Object?>)['kind'] as String)
+      .toList();
+}
+
 Event fakeEvent(String kind) {
   return Event(
     eventId: 'event-$kind',

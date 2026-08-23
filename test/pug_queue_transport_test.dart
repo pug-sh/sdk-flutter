@@ -141,6 +141,29 @@ void main() {
   });
 
   test(
+    'identify does not resurrect an identity reset during its await',
+    () async {
+      final storage = MemoryPugStorage();
+      final transport = GatedTransport();
+      final client = testClient(storage: storage, transport: transport);
+
+      final identifying = client.identify('user-1');
+      await Future<void>.delayed(Duration.zero);
+      client.reset();
+      final afterReset = readProfile(storage);
+
+      transport.gate.complete();
+      await identifying;
+
+      // The reset wins: a late write-back would restore the cleared external id
+      // and the pre-reset anonymous id.
+      expect(readProfile(storage), afterReset);
+      expect(readProfile(storage)['externalId'], isNull);
+      expect(storage.getString('__pug_project_external_id__'), isNull);
+    },
+  );
+
+  test(
     'transient transport errors rollback and permanent errors drop',
     () async {
       final transient =

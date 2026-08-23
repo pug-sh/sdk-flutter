@@ -29,12 +29,17 @@ class CampaignTracker {
   final PugStorageKeys _keys;
   final PugStorage _storage;
   final PugLogger _logger;
-  PugLinkProvider? _provider;
+  final PugLinkProvider? _provider;
   StreamSubscription<Uri>? _subscription;
 
   Future<void> start() async {
-    final provider = _provider ?? AppLinksPugLinkProvider();
-    _provider = provider;
+    final provider = _provider;
+    if (provider == null) {
+      _logger.warn(
+        'Pug campaign capture skipped: no PugLinkProvider was supplied.',
+      );
+      return;
+    }
 
     try {
       final initial = await provider.initialUri();
