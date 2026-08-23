@@ -82,6 +82,18 @@ backgrounded — `hidden`, `paused`, or `detached`. A transient `inactive` state
 not a close: the app is still visible during an incoming call, a control-centre
 swipe, or the app switcher.
 
+When `autoInstallEvents` is enabled (default), the SDK emits `app_install` on the
+first launch it ever sees on a device, and `app_update` (carrying
+`previousVersion`) on the first launch after the app version changes. This is a
+one-shot check at init rather than a lifecycle subscription, so it has its own
+option instead of riding on `autoTrack`. Detection needs the `$appVersion`
+auto-property, so it is inactive when a custom `PugAutoPropertyProvider` does not
+supply one. The
+install event is suppressed when other Pug state is already on the device, so
+adding this SDK to an app that already used Pug does not report its existing
+users as new installs; `Pug.destroy()` clears that state, so a destroy/re-init
+cycle does look like a fresh install.
+
 When `autoPageViews` is enabled (default), the SDK tracks a navigation event when
 the user navigates between routes: `screen_view` (with a `screenName` property) on
 iOS/Android, and `page_view` on web. Desktop (macOS/Windows/Linux) emits no

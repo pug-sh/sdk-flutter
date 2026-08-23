@@ -26,6 +26,7 @@ PugClient testClient({
   PugAutoPropertyProvider? autoPropertyProvider,
   bool autoTrack = false,
   bool autoPageViews = false,
+  bool autoInstallEvents = false,
   WidgetsBinding? lifecycleBinding,
 }) {
   final client = PugClient(
@@ -39,6 +40,7 @@ PugClient testClient({
           autoPropertyProvider ?? const PugStaticAutoPropertyProvider({}),
       autoTrack: autoTrack,
       autoPageViews: autoPageViews,
+      autoInstallEvents: autoInstallEvents,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),
     clock: clock ?? FakeClock(1000),

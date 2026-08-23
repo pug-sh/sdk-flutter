@@ -18,6 +18,36 @@ class PugStorageKeys {
   String get queue => '__pug_${projectId}_queue__';
   String get campaign => '__pug_${projectId}_campaign__';
   String get consent => '__pug_${projectId}_consent__';
+  String get lastVersion => '__pug_${projectId}_last_version__';
+
+  /// Every project-scoped key the SDK owns, in the order they are documented.
+  ///
+  /// A key added here but not to the purge in `PugClient.destroy()` (or the
+  /// other way round) changes install detection, via [priorActivity].
+  List<String> get all => [
+    session,
+    profile,
+    deviceId,
+    externalId,
+    queue,
+    campaign,
+    consent,
+    lastVersion,
+  ];
+
+  /// The keys whose presence proves the SDK has tracked on this device before.
+  ///
+  /// `InstallTracker` probes these to tell a fresh install from an app that
+  /// already had Pug on it. Derived from [all] so a new key counts as evidence
+  /// by default, minus two that are not:
+  ///
+  /// - `consent` is a user preference, not tracking activity, and is the one
+  ///   key `destroy()` deliberately keeps. Counting it would suppress the
+  ///   `app_install` of an install whose consent was denied at first launch and
+  ///   granted later — exactly the case the deferral exists for.
+  /// - `lastVersion` is what the probe is deciding.
+  List<String> get priorActivity =>
+      all.where((key) => key != consent && key != lastVersion).toList();
 }
 
 Map<String, Object?>? decodeStoredJsonMap(String raw, PugLogger logger) {
