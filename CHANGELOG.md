@@ -1,3 +1,23 @@
+## 0.0.5
+
+* **Breaking:** remove campaign capture, push device registration, and device
+  subscription from the public API. The backend does not accept them yet, so
+  shipping the entry points invited calls that could not succeed. The code stays
+  in the package and the features will be turned back on in a later release.
+  * `package:pug_flutter/pug_flutter.dart` no longer exports `PugPush`,
+    `PushProvider`, `PushSubscription`, `PushSubscribeOptions`,
+    `PugLinkProvider`, `AppLinksPugLinkProvider`, or `campaignPropertiesFromUri`.
+  * `PugOptions` no longer has `autoCaptureCampaigns` or `linkProvider`, and no
+    campaign auto-properties (`$utmSource`, `$gclid`, and the rest) are attached
+    to events.
+  * `PugTransport` no longer declares `subscribeDevice`; a custom transport does
+    not have to implement it. It moved to an internal `PugDeviceTransport` that
+    `ConnectPugTransport` still implements.
+* The `notification_clicked`, `notification_received`, and
+  `notification_dismissed` event kinds are unaffected: they are ordinary events
+  on the live events endpoint, still reachable through `Pug.track.*` and
+  `PugEventNames`.
+
 ## 0.0.4
 
 * Add the `$deviceType` auto-property, reporting the form factor as `tv`,

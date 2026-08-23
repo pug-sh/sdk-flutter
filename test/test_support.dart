@@ -4,6 +4,10 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter/pug_flutter.dart';
+// Campaign, push, and device registration are built but not on the public
+// surface: the backend does not accept them yet. Reach them through src/.
+import 'package:pug_flutter/src/campaign.dart';
+import 'package:pug_flutter/src/push_models.dart';
 
 import 'test_doubles.dart';
 
@@ -20,10 +24,8 @@ PugClient testClient({
   MemoryPugStorage? storage,
   PugLogger? logger,
   PugAutoPropertyProvider? autoPropertyProvider,
-  PugLinkProvider? linkProvider,
   bool autoTrack = false,
   bool autoPageViews = false,
-  bool autoCaptureCampaigns = false,
   WidgetsBinding? lifecycleBinding,
 }) {
   final client = PugClient(
@@ -35,10 +37,8 @@ PugClient testClient({
       logger: logger ?? const NoopPugLogger(),
       autoPropertyProvider:
           autoPropertyProvider ?? const PugStaticAutoPropertyProvider({}),
-      linkProvider: linkProvider,
       autoTrack: autoTrack,
       autoPageViews: autoPageViews,
-      autoCaptureCampaigns: autoCaptureCampaigns,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),
     clock: clock ?? FakeClock(1000),
@@ -50,17 +50,22 @@ PugClient testClient({
   return client;
 }
 
-Map<String, Object?> readSession(MemoryPugStorage storage) {
-  final raw = storage.getString('__pug_project_session__')!;
-  final decoded = jsonDecode(raw);
+Map<String, Object?> readSession(MemoryPugStorage storage) =>
+    _readJsonMap(storage, '__pug_project_session__');
+
+Map<String, Object?> readProfile(MemoryPugStorage storage) =>
+    _readJsonMap(storage, '__pug_project_profile__');
+
+Map<String, Object?> _readJsonMap(MemoryPugStorage storage, String key) {
+  final decoded = jsonDecode(storage.getString(key)!);
   if (decoded is! Map<Object?, Object?>) {
     return const {};
   }
   final typed = <String, Object?>{};
   for (final entry in decoded.entries) {
-    final key = entry.key;
-    if (key is String) {
-      typed[key] = entry.value;
+    final entryKey = entry.key;
+    if (entryKey is String) {
+      typed[entryKey] = entry.value;
     }
   }
   return typed;

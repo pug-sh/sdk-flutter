@@ -1,65 +1,27 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/widgets.dart';
+import 'package:meta/meta.dart';
 
 import 'auto_properties.dart';
-import 'campaign.dart';
+import 'campaign_tracker.dart';
 import 'clock_ids.dart';
 import 'configuration.dart';
 import 'connect_transport.dart';
 import 'contracts.dart';
-import 'errors.dart';
+import 'dispatcher.dart';
 import 'event_queue_storage.dart';
 import 'events.dart';
-import 'profile_manager.dart';
+import 'identity.dart';
+import 'lifecycle.dart';
+import 'navigation.dart';
+import 'options_normalizer.dart';
+import 'push_manager.dart';
 import 'push_models.dart';
-import 'session_manager.dart';
+import 'route_observer.dart';
+import 'state_storage.dart';
 import 'tracking_consent.dart';
 import 'version.dart';
-
-class PugRouteObserver extends NavigatorObserver {
-  static void Function(String?, String?)? onRouteChanged;
-
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    _onRouteChanged(_routeName(route), _routeName(previousRoute));
-  }
-
-  @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    _onRouteChanged(_routeName(previousRoute), _routeName(route));
-  }
-
-  @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    _onRouteChanged(_routeName(newRoute), _routeName(oldRoute));
-  }
-
-  @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    _onRouteChanged(_routeName(previousRoute), null);
-  }
-
-  void _onRouteChanged(String? url, String? referrer) {
-    onRouteChanged?.call(url, referrer);
-  }
-
-  String? _routeName(Route<dynamic>? route) {
-    if (route == null) {
-      return null;
-    }
-    final settings = route.settings;
-    final name = settings.name;
-    if (name != null && name.isNotEmpty) {
-      return name;
-    }
-    return route.runtimeType.toString();
-  }
-}
 
 class PugClient with WidgetsBindingObserver {
   PugClient({
@@ -68,12 +30,13 @@ class PugClient with WidgetsBindingObserver {
     PugClock? clock,
     PugIdGenerator? idGenerator,
     WidgetsBinding? lifecycleBinding,
-  }) : _options = _normalizeOptions(options),
+  }) : _options = normalizePugOptions(options),
        _clock = clock ?? SystemPugClock(),
        _ids = idGenerator ?? UuidV7Generator(),
        _lifecycleBinding = lifecycleBinding,
        _autoPropertyProvider =
            options.autoPropertyProvider ?? SystemPugAutoPropertyProvider(),
+       _keys = PugStorageKeys(projectId),
        _storage = SafePugStorage(
          primary: options.storage,
          fallback: MemoryPugStorage(),
@@ -85,73 +48,64 @@ class PugClient with WidgetsBindingObserver {
           endpoint: _options.endpoint,
           apiKey: _options.apiKey,
         );
-    _queue = PugEventQueue(
-      key: _queueKey,
-      storage: _storage,
+    _dispatcher = EventDispatcher(
+      queue: PugEventQueue(
+        key: _keys.queue,
+        storage: _storage,
+        logger: _options.logger,
+        maxQueueSize: _options.batch.maxQueueSize,
+      ),
+      transport: _transport,
       logger: _options.logger,
-      maxQueueSize: _options.batch.maxQueueSize,
+      batch: _options.batch,
+      dryRun: _options.dryRun,
     );
     _consent = TrackingConsentController(
-      projectId: projectId,
+      keys: _keys,
       storage: _storage,
       logger: _options.logger,
       config: _options.trackingConsent,
     );
-  }
-
-  void notifyRouteChanged(String? url, String? referrer) {
-    if (_disposed || url == _currentRoute) {
-      return;
-    }
-    _previousRoute = _currentRoute;
-    _currentRoute = url;
-    // Route state feeds the `$url`/`$referrer` auto-properties attached to
-    // every event (matching the web SDK), so it is tracked even when auto page
-    // views are disabled. Only the navigation event itself is gated by
-    // `autoPageViews`; it carries no explicit url/referrer props and relies on
-    // the auto-properties instead.
-    if (!_options.autoPageViews) {
-      return;
-    }
-    if (kIsWeb) {
-      track('page_view');
-      return;
-    }
-    // Navigation events are platform-limited in the proto: page_view is
-    // web-only and screen_view covers iOS/Android only. Desktop (macOS,
-    // Windows, Linux) and other native targets have no matching kind, so they
-    // emit no navigation event — the route state updated above still feeds the
-    // $url/$referrer auto-properties on later events. screen_view also requires
-    // a non-empty screenName, so a null route (e.g. the last route being
-    // removed) updates route state without emitting an event.
-    final platform = defaultTargetPlatform;
-    final emitsScreenView =
-        platform == TargetPlatform.iOS || platform == TargetPlatform.android;
-    if (!emitsScreenView) {
-      _warnUnsupportedNavPlatformOnce(platform, url);
-      return;
-    }
-    if (url != null && url.isNotEmpty) {
-      track('screen_view', props: {'screenName': url});
-    }
-  }
-
-  /// Logs once, at debug level, when a real route change lands on a native
-  /// platform with no navigation event kind (desktop and other non-iOS/Android
-  /// targets), so a developer who wired [PugRouteObserver] isn't left wondering
-  /// why no navigation events ever appear. Route context still rides on the
-  /// `$url`/`$referrer` auto-properties. Stays silent on null/empty routes,
-  /// since nothing was navigated to.
-  void _warnUnsupportedNavPlatformOnce(TargetPlatform platform, String? url) {
-    if (_warnedNoNavPlatform || url == null || url.isEmpty) {
-      return;
-    }
-    _warnedNoNavPlatform = true;
-    _options.logger.debug(
-      'Pug: auto navigation events are emitted only on iOS/Android '
-      '(screen_view) and web (page_view); ${platform.name} emits none. Route '
-      'context still rides on the \$url/\$referrer auto-properties.',
+    _identity = PugIdentity(
+      keys: _keys,
+      storage: _storage,
+      logger: _options.logger,
+      clock: _clock,
+      ids: _ids,
+      config: _options.session,
     );
+    _campaign = CampaignTracker(
+      keys: _keys,
+      storage: _storage,
+      logger: _options.logger,
+    );
+    _push = PushManager(
+      identity: _identity,
+      transport: _transport,
+      logger: _options.logger,
+    );
+    _navigation = NavigationTracker(
+      autoPageViews: _options.autoPageViews,
+      logger: _options.logger,
+      capture: (kind, props) => track(kind, props: props),
+    );
+    _lifecycle = AppLifecycleTracker(
+      autoTrack: _options.autoTrack,
+      capture:
+          (kind, {required immediate}) =>
+              track(kind, options: TrackOptions(immediate: immediate)),
+      onBackground: () => unawaited(_dispatcher.flush()),
+    );
+  }
+
+  /// [referrer] is reported by [PugRouteObserver] but not used: the tracker
+  /// derives the previous route from its own last-known route, which is what
+  /// the `$referrer` auto-property reflects.
+  void notifyRouteChanged(String? url, String? referrer) {
+    if (_disposed) {
+      return;
+    }
+    _navigation.didChangeRoute(url);
   }
 
   final String projectId;
@@ -160,36 +114,27 @@ class PugClient with WidgetsBindingObserver {
   final PugIdGenerator _ids;
   final WidgetsBinding? _lifecycleBinding;
   final PugAutoPropertyProvider _autoPropertyProvider;
+  final PugStorageKeys _keys;
   final SafePugStorage _storage;
   late final PugTransport _transport;
-  late final PugEventQueue _queue;
+  late final EventDispatcher _dispatcher;
   late final TrackingConsentController _consent;
-  Timer? _flushTimer;
-  StreamSubscription<Uri>? _linkSubscription;
-  PugLinkProvider? _linkProvider;
-  bool _isFlushing = false;
+  late final PugIdentity _identity;
+  late final CampaignTracker _campaign;
+  late final PushManager _push;
+  late final NavigationTracker _navigation;
+  late final AppLifecycleTracker _lifecycle;
   bool _disposed = false;
-  bool _isForeground = false;
   bool _started = false;
-  String? _currentRoute;
-  String? _previousRoute;
-  bool _warnedNoNavPlatform = false;
 
   /// Exposed so `Pug.logger` can surface the configured logger to callers
   /// (notably `TrackNamespace`) post-init. Safe to call before `start()`.
   PugLogger get logger => _options.logger;
 
   @visibleForTesting
-  PugEventQueue get queue => _queue;
+  PugEventQueue get queue => _dispatcher.queue;
 
   bool get isStarted => _started;
-
-  String get _sessionKey => '__pug_${projectId}_session__';
-  String get _profileKey => '__pug_${projectId}_profile__';
-  String get _deviceKey => '__pug_${projectId}_device_id__';
-  String get _externalIdKey => '__pug_${projectId}_external_id__';
-  String get _queueKey => '__pug_${projectId}_queue__';
-  String get _campaignKey => '__pug_${projectId}_campaign__';
 
   Future<void> start() async {
     try {
@@ -203,15 +148,12 @@ class PugClient with WidgetsBindingObserver {
       }
       _lifecycleBinding?.addObserver(this);
       _started = true;
-      if (_options.autoCaptureCampaigns) {
-        await _startCampaignCapture();
-      }
-      if (_options.autoTrack &&
-          _lifecycleBinding?.lifecycleState == AppLifecycleState.resumed) {
-        _isForeground = true;
-        track('app_open');
-      }
-      _scheduleFlush();
+      // Campaign capture is built but not started: the backend does not accept
+      // campaign data yet, so the tracker only purges stale state on destroy.
+      // Re-enabling is `await _campaign.start()` here, the campaign properties
+      // in _createEvent, and the barrel export of campaign.dart.
+      _lifecycle.syncInitialState(_lifecycleBinding?.lifecycleState);
+      _dispatcher.scheduleFlush();
     } catch (error, stackTrace) {
       _options.logger.error('Pug start failed.', error, stackTrace);
     }
@@ -240,16 +182,7 @@ class PugClient with WidgetsBindingObserver {
         _options.logger.debug('Pug dry run: event ${event.kind} accepted.');
         return;
       }
-      if (options.immediate) {
-        unawaited(_sendImmediateOrQueue(event));
-      } else {
-        _queue.push(event);
-        if (_queue.size >= _options.batch.maxSize) {
-          unawaited(flush());
-        } else {
-          _scheduleFlush();
-        }
-      }
+      _dispatcher.dispatch(event, immediate: options.immediate);
     } catch (error, stackTrace) {
       _options.logger.error('Pug track failed.', error, stackTrace);
     }
@@ -271,7 +204,7 @@ class PugClient with WidgetsBindingObserver {
       );
       return;
     }
-    final profile = _resolveProfile();
+    final profile = _identity.resolveProfile();
     final firstIdentify = profile.externalId == null;
     final sanitizedTraits = PropertyMapper(
       logger: _options.logger,
@@ -281,41 +214,16 @@ class PugClient with WidgetsBindingObserver {
         projectId: projectId,
         externalId: externalId,
         anonymousId: firstIdentify ? profile.anonymousId : null,
-        deviceId: firstIdentify ? _resolveDeviceId() : null,
+        deviceId: firstIdentify ? _identity.resolveDeviceId() : null,
         traits: sanitizedTraits,
       ),
     );
-    _storeProfile(profile.copyWith(externalId: externalId));
-    _storage.setString(_externalIdKey, externalId);
+    _identity.linkExternalId(profile, externalId);
   }
 
-  void reset() {
-    final now = _clock.nowMillis();
-    final deviceId = _rotateDeviceId();
-    final profile = ProfileState(anonymousId: 'anon-${_ids.nextId()}');
-    final session = SessionState(
-      sessionId: _ids.nextId(),
-      startTime: now,
-      lastActivityTime: now,
-      deviceId: deviceId,
-    );
-    _storeProfile(profile);
-    _storeSession(session);
-    _storage.remove(_externalIdKey);
-  }
+  void reset() => _identity.reset();
 
-  void rotate() {
-    final now = _clock.nowMillis();
-    final deviceId = _resolveDeviceId();
-    _storeSession(
-      SessionState(
-        sessionId: _ids.nextId(),
-        startTime: now,
-        lastActivityTime: now,
-        deviceId: deviceId,
-      ),
-    );
-  }
+  void rotate() => _identity.rotateSession();
 
   TrackingConsent get trackingConsent => _consent.status;
 
@@ -325,175 +233,61 @@ class PugClient with WidgetsBindingObserver {
 
   void optOutTracking() => _consent.optOut();
 
-  Future<void> flush() async {
-    if (_isFlushing || _disposed || _options.dryRun || _queue.size == 0) {
-      return;
-    }
-    _isFlushing = true;
-    try {
-      final events = _queue.lock(_options.batch.maxSize);
-      if (events.isEmpty) {
-        return;
-      }
-      await _transport.sendBatch(events);
-      _queue.commit();
-    } on PugTransportException catch (error, stackTrace) {
-      if (error.isPermanent) {
-        _options.logger.error(
-          'Pug dropped a permanently rejected batch.',
-          error,
-        );
-        _queue.commit();
-      } else {
-        _options.logger.warn('Pug batch send failed; it will be retried.');
-        _queue.rollback();
-        _scheduleFlush(withBackoff: true);
-      }
-      if (error.stackTrace != null) {
-        _options.logger.debug(error.stackTrace.toString());
-      }
-      _options.logger.debug(stackTrace.toString());
-    } catch (error, stackTrace) {
-      _options.logger.error(
-        'Pug dropped a batch after an unexpected transport failure.',
-        error,
-        stackTrace,
-      );
-      _queue.commit();
-      _options.logger.debug(stackTrace.toString());
-    } finally {
-      _isFlushing = false;
-    }
-  }
+  Future<void> flush() => _dispatcher.flush();
 
-  Future<void> flushAll() async {
-    while (!_disposed && !_options.dryRun && _queue.size > 0) {
-      final before = _queue.size;
-      await flush();
-      if (_queue.size >= before) {
-        break;
-      }
-    }
-  }
+  Future<void> flushAll() => _dispatcher.flushAll();
 
+  @internal
   Future<void> subscribePush(
     PushProvider provider, {
     PushSubscribeOptions options = const PushSubscribeOptions(),
   }) async {
-    try {
-      if (_disposed) {
-        _options.logger.warn(
-          'Pug push subscribe skipped: client is destroyed.',
-        );
-        return;
-      }
-      final deviceId = _resolveDeviceId();
-      final profile = _resolveProfile();
-      final token = await provider.getToken();
-      if (token.trim().isEmpty) {
-        _options.logger.warn('Pug push subscribe skipped: token unavailable.');
-        return;
-      }
-      final properties = <String, Object?>{
-        ...options.properties,
-        'pushProvider': provider.provider,
-      };
-      await _transport.subscribeDevice(
-        PushSubscription(
-          provider: provider.provider,
-          platform: provider.platform,
-          token: token,
-          deviceId: deviceId,
-          profileExternalId: options.profileExternalId ?? profile.externalId,
-          profileId: options.profileId,
-          properties: properties,
-        ),
-      );
-    } catch (error, stackTrace) {
-      _options.logger.error('Pug push subscribe failed.', error, stackTrace);
+    if (_disposed) {
+      _options.logger.warn('Pug push subscribe skipped: client is destroyed.');
+      return;
     }
+    await _push.subscribe(provider, options: options);
   }
 
-  Future<void> unsubscribePush(PushProvider provider) async {
-    try {
-      await provider.deleteToken();
-    } catch (error, stackTrace) {
-      _options.logger.error('Pug push unsubscribe failed.', error, stackTrace);
-    }
-  }
+  @internal
+  Future<void> unsubscribePush(PushProvider provider) =>
+      _push.unsubscribe(provider);
 
-  void trackNotificationOpened(Map<Object?, Object?> data) {
-    track(
-      'notification_clicked',
-      props: _notificationProps(data),
-      options: const TrackOptions(immediate: true),
-    );
-  }
+  @internal
+  void trackNotificationOpened(Map<Object?, Object?> data) =>
+      _trackNotification('notification_clicked', data);
 
-  void trackNotificationReceived(Map<Object?, Object?> data) {
+  @internal
+  void trackNotificationReceived(Map<Object?, Object?> data) =>
+      _trackNotification('notification_received', data);
+
+  @internal
+  void trackNotificationDismissed(Map<Object?, Object?> data) =>
+      _trackNotification('notification_dismissed', data);
+
+  void _trackNotification(String kind, Map<Object?, Object?> data) {
     // Notification callbacks often fire while backgrounded; send immediately so
     // the event is not stranded in the queue if the OS suspends the process.
     track(
-      'notification_received',
-      props: _notificationProps(data),
+      kind,
+      props: notificationEventProperties(data),
       options: const TrackOptions(immediate: true),
     );
-  }
-
-  void trackNotificationDismissed(Map<Object?, Object?> data) {
-    track(
-      'notification_dismissed',
-      props: _notificationProps(data),
-      options: const TrackOptions(immediate: true),
-    );
-  }
-
-  /// Sanitizes a notification payload and guarantees a usable `campaignId`.
-  ///
-  /// The notification_* schemas mark `campaign_id` as required (buf.validate
-  /// `required`), so an event that omits it is expected to be rejected
-  /// server-side — and a permanent rejection drops the event (see the transport
-  /// notes on permanent failures). To stay safe we always send a value: like
-  /// the web SDK, a missing, empty, or non-string `campaignId` becomes
-  /// "(unknown)".
-  Map<String, Object?> _notificationProps(Map<Object?, Object?> data) {
-    final props = sanitizeNotificationData(data);
-    final campaignId = props['campaignId'];
-    if (campaignId is! String || campaignId.isEmpty) {
-      props['campaignId'] = '(unknown)';
-    }
-    return props;
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    switch (state) {
-      case AppLifecycleState.resumed:
-        if (_options.autoTrack && !_isForeground) {
-          _isForeground = true;
-          track('app_open');
-        }
-      case AppLifecycleState.inactive:
-      case AppLifecycleState.hidden:
-      case AppLifecycleState.paused:
-      case AppLifecycleState.detached:
-        if (_options.autoTrack && _isForeground) {
-          _isForeground = false;
-          track('app_close', options: const TrackOptions(immediate: true));
-        }
-        unawaited(flush());
-    }
-  }
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      _lifecycle.handleStateChange(state);
 
   Future<void> destroy() async {
     if (_disposed) {
       return;
     }
-    _flushTimer?.cancel();
+    _dispatcher.cancelScheduledFlush();
     try {
       // Best-effort final flush so queued events get a real send attempt before
       // the storage purge below, rather than racing it.
-      await flushAll();
+      await _dispatcher.flushAll();
     } catch (error, stackTrace) {
       _options.logger.error(
         'Pug final flush during destroy failed.',
@@ -502,26 +296,21 @@ class PugClient with WidgetsBindingObserver {
       );
     } finally {
       // Teardown must run even if the flush above throws, or the client would
-      // leak its lifecycle observer, link subscription, and timers. Cancel the
-      // timer again in case the final flush rescheduled one on a transient
-      // failure.
-      _flushTimer?.cancel();
+      // leak its lifecycle observer, link subscription, and timers.
       // Surface undelivered events so the loss is loud, not silent: the final
       // flush above already logged a misleading "will be retried" on a
       // transient failure, but the queue is about to be purged below.
-      final undelivered = _queue.size;
+      final undelivered = _dispatcher.pending;
       if (undelivered > 0) {
         _options.logger.warn(
           'Pug.destroy discarded $undelivered undelivered event(s) that could '
           'not be flushed.',
         );
       }
-      _queue.dispose();
-      if (_transport case final ConnectPugTransport transport) {
-        transport.close();
-      }
-      unawaited(_linkSubscription?.cancel());
-      _linkProvider?.dispose();
+      // Cancels a timer the final flush may have rescheduled on a transient
+      // failure, then closes the queue and transport.
+      _dispatcher.dispose();
+      _campaign.dispose();
       _lifecycleBinding?.removeObserver(this);
       // Only clear the shared route hook if it still points at this client; a
       // follow-up init() may have already rebound it to a new client, since
@@ -529,37 +318,11 @@ class PugClient with WidgetsBindingObserver {
       if (PugRouteObserver.onRouteChanged == notifyRouteChanged) {
         PugRouteObserver.onRouteChanged = null;
       }
-      _storage.remove(_sessionKey);
-      _storage.remove(_profileKey);
-      _storage.remove(_deviceKey);
-      _storage.remove(_externalIdKey);
-      _storage.remove(_campaignKey);
-      _storage.remove(_queueKey);
-      _currentRoute = null;
-      _previousRoute = null;
+      _identity.clear();
+      _campaign.clear();
+      _storage.remove(_keys.queue);
+      _navigation.clear();
       _disposed = true;
-    }
-  }
-
-  Future<void> _sendImmediateOrQueue(Event event) async {
-    try {
-      await _transport.send(event);
-    } on PugTransportException catch (error) {
-      if (error.isPermanent) {
-        _options.logger.error(
-          'Pug dropped a permanently rejected event.',
-          error,
-        );
-      } else {
-        _queue.push(event);
-        _scheduleFlush(withBackoff: true);
-      }
-    } catch (error, stackTrace) {
-      _options.logger.error(
-        'Pug dropped an event after an unexpected transport failure.',
-        error,
-        stackTrace,
-      );
     }
   }
 
@@ -568,26 +331,24 @@ class PugClient with WidgetsBindingObserver {
     Map<String, Object?> props,
     int? timestampMillis,
   ) {
-    final session = _resolveSession();
-    final profile = _resolveProfile();
+    final session = _identity.resolveSession();
+    final profile = _identity.resolveProfile();
     final mapper = PropertyMapper(logger: _options.logger);
     final customProperties = mapper.mapEventProperties(kind, props);
     if (customProperties == null) {
       return null;
     }
-    final currentRoute = _currentRoute;
-    final previousRoute = _previousRoute;
+    final currentRoute = _navigation.url;
+    final previousRoute = _navigation.referrer;
     final autoProperties = mapper.mapProperties({
       r'$projectId': projectId,
       r'$sdkVersion': pugSdkVersion,
       if (currentRoute != null) r'$url': currentRoute,
       if (previousRoute != null) r'$referrer': previousRoute,
       ..._autoPropertyProvider.properties(),
-      ..._storedCampaignProperties(),
     });
     final now = _clock.nowMillis();
-    final updatedSession = session.copyWith(lastActivityTime: now);
-    _storeSession(updatedSession);
+    final updatedSession = _identity.touchSession(session, now);
     return Event(
       eventId: _ids.nextId(),
       projectId: projectId,
@@ -598,217 +359,5 @@ class PugClient with WidgetsBindingObserver {
       customProperties: customProperties,
       autoProperties: autoProperties,
     );
-  }
-
-  SessionState _resolveSession() {
-    final now = _clock.nowMillis();
-    final deviceId = _resolveDeviceId();
-    final stored = _storage.getString(_sessionKey);
-    final decoded = stored == null ? null : _tryDecode(stored, _options.logger);
-    final current = decoded == null ? null : _trySessionFromJson(decoded);
-    if (current == null) {
-      final created = SessionState(
-        sessionId: _ids.nextId(),
-        startTime: now,
-        lastActivityTime: now,
-        deviceId: deviceId,
-      );
-      _storeSession(created);
-      return created;
-    }
-    final idleMs = now - current.lastActivityTime;
-    final durationMs = now - current.startTime;
-    final shouldRotate =
-        idleMs > _options.session.idleTimeout.inMilliseconds ||
-        durationMs > _options.session.maxDuration.inMilliseconds;
-    if (!shouldRotate) {
-      return current;
-    }
-    final rotated = SessionState(
-      sessionId: _ids.nextId(),
-      startTime: now,
-      lastActivityTime: now,
-      deviceId: deviceId,
-    );
-    _storeSession(rotated);
-    return rotated;
-  }
-
-  String _resolveDeviceId() {
-    final stored = _storage.getString(_deviceKey);
-    if (stored != null && stored.isNotEmpty) {
-      return stored;
-    }
-    final created = _ids.nextId();
-    _storage.setString(_deviceKey, created);
-    return created;
-  }
-
-  String _rotateDeviceId() {
-    final deviceId = _ids.nextId();
-    _storage.setString(_deviceKey, deviceId);
-    return deviceId;
-  }
-
-  ProfileState _resolveProfile() {
-    final stored = _storage.getString(_profileKey);
-    final decoded = stored == null ? null : _tryDecode(stored, _options.logger);
-    final current = decoded == null ? null : _tryProfileFromJson(decoded);
-    if (current != null) {
-      return current;
-    }
-    final created = ProfileState(
-      anonymousId: 'anon-${_ids.nextId()}',
-      externalId: _storage.getString(_externalIdKey),
-    );
-    _storeProfile(created);
-    return created;
-  }
-
-  void _storeSession(SessionState session) {
-    _storage.setString(_sessionKey, jsonEncode(session.toJson()));
-  }
-
-  void _storeProfile(ProfileState profile) {
-    _storage.setString(_profileKey, jsonEncode(profile.toJson()));
-  }
-
-  SessionState? _trySessionFromJson(Map<String, Object?> json) {
-    try {
-      return SessionState.fromJson(json);
-    } catch (error, stackTrace) {
-      _options.logger.warn('Pug stored session state could not be decoded.');
-      _options.logger.debug(error.toString());
-      _options.logger.debug(stackTrace.toString());
-      return null;
-    }
-  }
-
-  ProfileState? _tryProfileFromJson(Map<String, Object?> json) {
-    try {
-      return ProfileState.fromJson(json);
-    } catch (error, stackTrace) {
-      _options.logger.warn('Pug stored profile state could not be decoded.');
-      _options.logger.debug(error.toString());
-      _options.logger.debug(stackTrace.toString());
-      return null;
-    }
-  }
-
-  Future<void> _startCampaignCapture() async {
-    if (!_options.autoCaptureCampaigns) {
-      return;
-    }
-    final provider = _options.linkProvider ?? AppLinksPugLinkProvider();
-    _linkProvider = provider;
-
-    try {
-      final initial = await provider.initialUri();
-      if (initial != null) {
-        _captureCampaign(initial);
-      }
-    } catch (error, stackTrace) {
-      _options.logger.warn('Pug could not read initial campaign link.');
-      _options.logger.debug(error.toString());
-      _options.logger.debug(stackTrace.toString());
-    }
-
-    try {
-      _linkSubscription = provider.uriStream.listen(
-        _captureCampaign,
-        onError: (Object error, StackTrace? stackTrace) {
-          _options.logger.warn('Pug campaign link stream failed.');
-          _options.logger.debug(error.toString());
-          if (stackTrace != null) {
-            _options.logger.debug(stackTrace.toString());
-          }
-        },
-      );
-    } catch (error, stackTrace) {
-      _options.logger.warn('Pug could not listen for campaign links.');
-      _options.logger.debug(error.toString());
-      _options.logger.debug(stackTrace.toString());
-    }
-  }
-
-  void _captureCampaign(Uri uri) {
-    final properties = campaignPropertiesFromUri(uri);
-    if (properties.isEmpty) {
-      return;
-    }
-    _storage.setString(_campaignKey, jsonEncode(properties));
-  }
-
-  Map<String, Object?> _storedCampaignProperties() {
-    final raw = _storage.getString(_campaignKey);
-    final decoded = raw == null ? null : _tryDecode(raw, _options.logger);
-    if (decoded == null) {
-      return const {};
-    }
-    final properties = <String, Object?>{};
-    for (final entry in decoded.entries) {
-      if (entry.key.startsWith(r'$')) {
-        properties[entry.key] = entry.value;
-      }
-    }
-    return properties;
-  }
-
-  void _scheduleFlush({bool withBackoff = false}) {
-    if (_disposed) {
-      return;
-    }
-    _flushTimer?.cancel();
-    final wait =
-        withBackoff
-            ? Duration(milliseconds: max(_options.batch.maxWaitMs, 1000) * 2)
-            : Duration(milliseconds: _options.batch.maxWaitMs);
-    _flushTimer = Timer(wait, () => unawaited(flush()));
-  }
-}
-
-PugOptions _normalizeOptions(PugOptions options) {
-  final logger = SafePugLogger(options.logger);
-  return PugOptions(
-    apiKey: options.apiKey,
-    endpoint: options.endpoint,
-    batch: BatchConfig(
-      maxSize: max(options.batch.maxSize, 1),
-      maxWaitMs: max(options.batch.maxWaitMs, 0),
-      maxQueueSize: max(options.batch.maxQueueSize, 1),
-    ),
-    session: options.session,
-    autoTrack: options.autoTrack,
-    autoPageViews: options.autoPageViews,
-    dryRun: options.dryRun,
-    autoCaptureCampaigns: options.autoCaptureCampaigns,
-    trackingConsent: options.trackingConsent,
-    logger: logger,
-    storage: options.storage,
-    transport: options.transport,
-    autoPropertyProvider: options.autoPropertyProvider,
-    linkProvider: options.linkProvider,
-  );
-}
-
-Map<String, Object?>? _tryDecode(String raw, PugLogger logger) {
-  try {
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map<Object?, Object?>) {
-      return null;
-    }
-    final typed = <String, Object?>{};
-    for (final entry in decoded.entries) {
-      final key = entry.key;
-      if (key is String) {
-        typed[key] = entry.value;
-      }
-    }
-    return typed;
-  } catch (error, stackTrace) {
-    logger.warn('Pug stored JSON could not be decoded.');
-    logger.debug(error.toString());
-    logger.debug(stackTrace.toString());
-    return null;
   }
 }

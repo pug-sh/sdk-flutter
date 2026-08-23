@@ -343,7 +343,6 @@ PugClient buildClient({
       trackingConsent: consent,
       autoTrack: autoTrack,
       autoPageViews: autoPageViews,
-      autoCaptureCampaigns: false,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),
   );

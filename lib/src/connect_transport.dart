@@ -62,7 +62,7 @@ class ConnectException implements Exception {
 /// acknowledgements the SDK never reads, so they are not decoded. Non-200
 /// responses are mapped to a [PugTransportException] whose `permanent` flag
 /// decides whether the batch is dropped or retried.
-class ConnectPugTransport implements PugTransport {
+class ConnectPugTransport implements PugTransport, PugDeviceTransport {
   ConnectPugTransport({
     required this.endpoint,
     required this.apiKey,

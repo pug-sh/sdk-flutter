@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 ## Project Overview
 
-Pug Flutter SDK is a Flutter/Dart analytics, identity, session, batching, and push device registration SDK. It is intended to match the product semantics of `../sdk-web` while using Flutter-native lifecycle and storage APIs.
+Pug Flutter SDK is a Flutter/Dart analytics, identity, session, and batching SDK. Push device registration is built but not on the public surface (see `### Not On The Public Surface`). It is intended to match the product semantics of `../sdk-web` while using Flutter-native lifecycle and storage APIs.
 
 The public barrel is `lib/pug_flutter.dart`. Core runtime logic lives under `lib/src/`; generated protobuf Dart code lives under `lib/src/gen/` and is produced from `proto/**/*.proto`.
 
@@ -34,19 +34,44 @@ make check        # protos + format + analyze + test
 - `Pug.identify(externalId, traits:)` never throws — invalid input and transport failures are logged and the future completes normally, matching the web SDK.
 - `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` manage identity/session/runtime state.
 - `Pug.optInTracking()`, `Pug.optOutTracking()`, `Pug.getTrackingConsent()`, and `Pug.isTrackingEnabled()` manage tracking consent. See `### Tracking Consent`.
+- Campaign capture, push device registration, and the notification helpers are **built but off the public surface**: the backend does not accept them yet. See `### Not On The Public Surface`.
 - `Pug.track` is a callable `TrackNamespace`:
   - `Pug.track('kind', props: {...})` — custom/dynamic event names (untyped, discouraged for well-known events).
   - `Pug.track.<event>(...)` — one typed method per well-known event (codegen'd from `proto/`). Required fields are compile-time enforced; `extras: Map<String, Object?>` is always available for ad-hoc props.
 
-`PugPush` in `lib/src/push.dart` exposes provider-neutral push subscription, unsubscription, and notification event helpers.
+`PugPush` in `lib/src/push.dart` exposes provider-neutral push subscription, unsubscription, and notification event helpers. It is **not exported** from the barrel — see `### Not On The Public Surface`.
+
+### Not On The Public Surface
+
+Campaigns, devices, push registration, and subscriptions are not live on the backend, so their entry points were removed from the public API while the code stayed in the package. Concretely:
+
+- `lib/pug_flutter.dart` no longer exports `src/campaign.dart` or `src/push.dart`, so `PugLinkProvider`, `AppLinksPugLinkProvider`, `campaignPropertiesFromUri`, `PugPush`, `PushProvider`, `PushSubscription`, and `PushSubscribeOptions` are package-internal.
+- `PugOptions` lost `autoCaptureCampaigns` and `linkProvider`. `PugClient` still constructs `CampaignTracker`, but `start()` does not call `start()` on it and `_createEvent` does not merge `_campaign.properties()`, so no `$utm*`/click-id auto-properties are attached. `destroy()` still calls `clear()` so stale campaign state from an earlier version is purged.
+- `PugTransport` no longer declares `subscribeDevice`. It moved to `PugDeviceTransport` in `lib/src/push_models.dart`, which `ConnectPugTransport` implements; `PushManager` resolves it once in its constructor and warns on the first `subscribe()` if the injected transport does not implement it. A custom transport is no longer required to implement device registration.
+- `PugClient.subscribePush`, `unsubscribePush`, and `trackNotificationOpened`/`Received`/`Dismissed` are annotated `@internal` (the same convention `Pug.logger`/`Pug.capture` already use) so they stay callable from `PugPush` and tests without being public API.
+- The `notification_clicked`/`received`/`dismissed` event kinds stay public through the typed `Pug.track.*` methods and `PugEventNames`: they are ordinary events on the live events endpoint, and they are regenerated from `proto/` by `make protos`.
+
+Re-enabling is: restore the two barrel exports, the two `PugOptions` fields, the `await _campaign.start()` call and the campaign properties in `_createEvent`, and fold `subscribeDevice` back into `PugTransport`. `test/campaign_tracker_test.dart` covers `CampaignTracker` directly in the meantime, and the push tests reach the entry points through `package:pug_flutter/src/`.
 
 ### Runtime
 
-`PugClient` in `lib/src/runtime.dart` owns transport, queue, storage, session/profile state, flush scheduling, and Flutter lifecycle observation. `track()` builds an `Event`, queues or sends it immediately, and catches all failures.
+`PugClient` in `lib/src/runtime.dart` is a coordinator: it constructs and wires the collaborators below, gates capture on consent and `dryRun`, assembles `Event`s in `_createEvent`, and owns start/destroy ordering. It catches all failures. The concerns that own state live in their own files:
 
-Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle changes emit `app_open` and `app_close`. When `autoPageViews` is enabled (default), route changes emit navigation events — `screen_view` (with the required `screenName` property) on iOS/Android, `page_view` on web (`kIsWeb`), matching the proto platform annotations ("use screen_view for native mobile screens"). Desktop (macOS/Windows/Linux) and other native targets emit no navigation event, because the schema restricts `screen_view` to iOS/Android and `page_view` to web; route state is still updated for the `$url`/`$referrer` auto-properties. Host apps must add `PugRouteObserver()` to their Navigator's `navigatorObservers` to enable this feature. `Pug.init(...)` binds `PugRouteObserver.onRouteChanged` to the active client. Route changes update the current/previous route, attached to every event as the `$url`/`$referrer` auto-properties (matching the web SDK). This route state is tracked whenever the observer reports a change — even when `autoPageViews` is disabled — and the navigation event carries no explicit `url`/`referrer` props, relying on the auto-properties instead. A null route (e.g. the last route being removed) updates route state without emitting a native navigation event, since `screen_view` requires a non-empty name. Likewise, on desktop and other non-iOS/Android native targets the route state advances but no navigation event is emitted.
+- `EventDispatcher` (`lib/src/dispatcher.dart`) — queue, transport, flush timer, and the permanent-vs-transient failure policy.
+- `PugIdentity` (`lib/src/identity.dart`) — device, session, and profile state.
+- `CampaignTracker` (`lib/src/campaign_tracker.dart`) — app/deep-link capture and replay (constructed but not started; see below).
+- `NavigationTracker` (`lib/src/navigation.dart`) — route state and the platform-specific navigation event kind.
+- `AppLifecycleTracker` (`lib/src/lifecycle.dart`) — the foreground/background state machine behind `app_open`/`app_close`.
+- `PushManager` (`lib/src/push_manager.dart`) — device token subscribe/unsubscribe.
+- `TrackingConsentController` — as described below.
 
-Campaign capture is enabled by default through `PugOptions.autoCaptureCampaigns`. On start, `PugClient` reads the initial app/deep link and listens for later links through `PugLinkProvider`/`AppLinksPugLinkProvider`; host apps must still configure Android App Links, iOS Universal Links, or custom URL schemes.
+The storage-backed collaborators share `PugStorageKeys`. `PugRouteObserver` lives in `lib/src/route_observer.dart` and `normalizePugOptions` (option clamping plus the `SafePugLogger` wrap) in `lib/src/options_normalizer.dart`.
+
+Ordering that matters in `start()`: campaign capture does not run today (see `### Not On The Public Surface`), but when it is re-enabled it must go before `AppLifecycleTracker.syncInitialState`, so the launch `app_open` carries the campaign auto-properties from the launch link. `PugClient` keeps the `WidgetsBindingObserver` mixin and forwards `didChangeAppLifecycleState` to the tracker; the tracker is deliberately not the registered observer, since dropping the mixin would narrow `PugClient`'s public type.
+
+Auto tracking is conservative for mobile: when `autoTrack` is enabled, lifecycle changes emit `app_open` and `app_close`. When `autoPageViews` is enabled (default), route changes emit navigation events — `screen_view` (with the required `screenName` property) on iOS/Android, `page_view` on web (`kIsWeb`), matching the proto platform annotations ("use screen_view for native mobile screens"). Desktop (macOS/Windows/Linux) and other native targets emit no navigation event, because the schema restricts `screen_view` to iOS/Android and `page_view` to web; route state is still updated for the `$url`/`$referrer` auto-properties. Host apps must add `PugRouteObserver()` to their Navigator's `navigatorObservers` to enable this feature. `Pug.init(...)` binds `PugRouteObserver.onRouteChanged` to the active client, whose `notifyRouteChanged` forwards to `NavigationTracker`. The observer reports a `referrer`, but it is unused: the tracker derives the previous route from its own last-known route, which is what `$referrer` reflects. Route changes update the current/previous route, attached to every event as the `$url`/`$referrer` auto-properties (matching the web SDK). This route state is tracked whenever the observer reports a change — even when `autoPageViews` is disabled — and the navigation event carries no explicit `url`/`referrer` props, relying on the auto-properties instead. A null route (e.g. the last route being removed) updates route state without emitting a native navigation event, since `screen_view` requires a non-empty name. Likewise, on desktop and other non-iOS/Android native targets the route state advances but no navigation event is emitted.
+
+Campaign capture is implemented in `CampaignTracker` — it reads the initial app/deep link and listens for later links through `PugLinkProvider`/`AppLinksPugLinkProvider` — but `PugClient.start()` does not start it, and host apps have no way to configure it. See `### Not On The Public Surface`.
 
 ### Storage
 
@@ -56,7 +81,7 @@ Campaign capture is enabled by default through `PugOptions.autoCaptureCampaigns`
 - `SafePugStorage` wraps a primary store and switches to memory if a storage call throws synchronously. (`SharedPreferencesPugStorage` write/remove failures surface asynchronously, so they are logged — key only — but do not trip the memory fallback.)
 - `SharedPreferencesPugStorage` provides default persistent storage for `Pug.init(...)`.
 
-State keys are project-namespaced:
+State keys are project-namespaced and defined once, in `PugStorageKeys` (`lib/src/state_storage.dart`), alongside the `decodeStoredJsonMap` helper the state owners share:
 
 - `__pug_<projectId>_session__`
 - `__pug_<projectId>_profile__`
@@ -98,9 +123,9 @@ Auto properties include `$projectId`, `$sdkVersion`, `$platform`, `$deviceType`,
 
 `$platform` is a cross-SDK contract, not a Flutter detail: the backend promotes it into a dedicated `platform` column verbatim, with no normalization or validation on the ingest path, so casing that diverges from the rest of the family splits a cross-SDK breakdown into per-SDK buckets. `SystemPugAutoPropertyProvider.platformName` returns `web` when `kIsWeb`, else `Platform.operatingSystem` lowercased — so `$platform` and `$os` are one value from one source, exactly as `sdk-react-native` reports both from `Platform.OS`.
 
-Do **not** derive `$platform` from `defaultTargetPlatform`. That is a UI-theming signal: `.name` reproduces the enum's casing (`iOS`, `macOS`), on web it resolves to the *browser's host* OS, and it *throws* `FlutterError` on any target outside its six-member enum — raised inside `properties()`, which `_createEvent` calls unguarded, that would breach the never-throw invariant. `kIsWeb` must still be checked first (the same ordering `runtime.dart` uses to choose `page_view` over `screen_view`).
+Do **not** derive `$platform` from `defaultTargetPlatform`. That is a UI-theming signal: `.name` reproduces the enum's casing (`iOS`, `macOS`), on web it resolves to the *browser's host* OS, and it *throws* `FlutterError` on any target outside its six-member enum — raised inside `properties()`, which `_createEvent` calls unguarded, that would breach the never-throw invariant. `kIsWeb` must still be checked first (the same ordering `navigation.dart` uses to choose `page_view` over `screen_view`).
 
-This rule is scoped to `$platform`. `runtime.dart` still reads `defaultTargetPlatform` to choose `screen_view` over `page_view`, which is a deliberate exception: it picks between proto event kinds whose platform annotations cover exactly the enum's members, and `debugDefaultTargetPlatformOverride` is what makes that branch testable on a Linux host. It inherits the throw-on-unknown-target risk, so a target outside the enum needs handling there before it is supported.
+This rule is scoped to `$platform`. `NavigationTracker` (`lib/src/navigation.dart`) still reads `defaultTargetPlatform` to choose `screen_view` over `page_view`, which is a deliberate exception: it picks between proto event kinds whose platform annotations cover exactly the enum's members, and `debugDefaultTargetPlatformOverride` is what makes that branch testable on a Linux host. It inherits the throw-on-unknown-target risk, so a target outside the enum needs handling there before it is supported.
 
 Across the family the set is `web | ios | android | server | macos | linux | windows | fuchsia`, plus any other value `Platform.operatingSystem` reports; `server` comes from `@pug-sh/node` and the desktop values are Flutter-only. The set is open rather than validated — an unrecognised target reports its own name instead of being folded into a neighbouring platform.
 
@@ -110,7 +135,7 @@ Across the family the set is `web | ios | android | server | macos | linux | win
 
 `_appleModel` treats the plugin's `Unknown device`/`Unknown Model` table misses as absent and falls back to the coarse identifier (`"iPhone"`, `"MacBookPro18,3"`) — the placeholders are non-empty, so an emptiness check alone would ship them as `$deviceModel`. The device mappers omit an empty `$osVersion` rather than sending it: `_staticProperties` spreads last in `properties()`, so an empty value would clobber the `Platform.operatingSystemVersion` fallback, and the property mapper drops only `null`, never `""`.
 
-Campaign auto-properties are merged from the latest captured app/deep link: `$utmSource`, `$utmMedium`, `$utmCampaign`, `$utmTerm`, `$utmContent`, `$gclid`, `$fbclid`, `$msclkid`, and `$ttclid`. They are stored under the project-scoped campaign key and attached to later events.
+Campaign auto-properties are **not currently attached** (see `### Not On The Public Surface`). When capture is re-enabled they are merged from the latest captured app/deep link: `$utmSource`, `$utmMedium`, `$utmCampaign`, `$utmTerm`, `$utmContent`, `$gclid`, `$fbclid`, `$msclkid`, and `$ttclid`. They are stored under the project-scoped campaign key and attached to later events.
 
 Tests should prefer `PugStaticAutoPropertyProvider` to avoid platform plugin dependencies.
 
@@ -137,19 +162,19 @@ Well-known event schemas are generated from the `proto/common/events/v1/*_events
 
 ### Identity And Sessions
 
-Sessions are lazily resolved on event creation. Defaults match the web/mobile spec: 30 minute idle timeout and 1440 minute max duration. Device identity is stored separately from session state under a project-scoped device key. `rotate()` creates a new session while preserving device ID. `reset()` rotates both session and device identity and clears profile identity.
+`PugIdentity` in `lib/src/identity.dart` owns device, session, and profile state, including the `SessionState`/`ProfileState` models and their persistence. Sessions are lazily resolved on event creation. Defaults match the web/mobile spec: 30 minute idle timeout and 1440 minute max duration. Device identity is stored separately from session state under a project-scoped device key. `PugClient.rotate()` (`PugIdentity.rotateSession()`) creates a new session while preserving device ID. `reset()` rotates both session and device identity and clears profile identity; the order in which it draws IDs is load-bearing for tests that inject a sequence generator.
 
 Anonymous profile IDs are prefixed with `anon-`. The first successful `identify()` includes anonymous ID for backend merge semantics; subsequent identifies omit it.
 
 ### Tracking Consent
 
-`TrackingConsentController` in `lib/src/tracking_consent.dart` holds consent state and gates capture, matching the web SDK's consent model. When consent is `denied`, `track()` (typed and untyped), `identify()`, and automatic capture (lifecycle, page views, notifications) are dropped; `identify()` returns normally without hitting transport. The gate lives in `PugClient.track()`/`identify()` and is checked before event creation. Automatic campaign/deep-link capture is *not* gated: while denied, campaign parameters are still written to `__pug_<projectId>_campaign__` and attached to later events, but nothing is transmitted until consent is granted (event creation is gated). Consent activity — denied-drop debug logs, an invalid persisted value, or a `SafePugStorage` persistence failure — is reported only through the configured `PugLogger`; the default `NoopPugLogger` discards debug/warn/error, so configure a logger to observe consent behavior.
+`TrackingConsentController` in `lib/src/tracking_consent.dart` holds consent state and gates capture, matching the web SDK's consent model. When consent is `denied`, `track()` (typed and untyped), `identify()`, and automatic capture (lifecycle, page views, notifications) are dropped; `identify()` returns normally without hitting transport. The gate lives in `PugClient.track()`/`identify()` and is checked before event creation. Campaign capture is not started (see `### Not On The Public Surface`), so nothing is written to `__pug_<projectId>_campaign__` and no campaign auto-properties are attached. When it is re-enabled, capture is deliberately *not* consent-gated: while denied, parameters are still recorded locally and attached to later events, but nothing is transmitted until consent is granted (event creation is gated). Consent activity — denied-drop debug logs, an invalid persisted value, or a `SafePugStorage` persistence failure — is reported only through the configured `PugLogger`; the default `NoopPugLogger` discards debug/warn/error, so configure a logger to observe consent behavior.
 
 Consent is configured through `PugOptions.trackingConsent` (`TrackingConsentConfig`): `defaultConsent` (default `granted`) seeds first-run state, and `persist` (default `false`) mirrors opt in/out to the project-scoped key `__pug_<projectId>_consent__` and restores it on the next `init()`. The runtime exposes `optInTracking()`, `optOutTracking()`, `trackingConsent`, and `isTrackingEnabled`, surfaced publicly on `Pug`. Consent is independent of `dryRun`, which suppresses delivery without changing consent. `destroy()` does not clear persisted consent, so a user's opt-out survives teardown.
 
 ### Push
 
-Push is provider-neutral at the API level through `PushProvider`. No concrete provider ships with the SDK; host apps supply their own `PushProvider` implementation. The notification received/clicked/dismissed tracking helpers on `PugPush` are implemented today; an FCM (or other) provider may be packaged as a separate add-on. All three notification helpers send immediately, since notification callbacks often fire while the app is backgrounded.
+`PushManager` in `lib/src/push_manager.dart` performs subscribe/unsubscribe against the transport, resolving the device and profile from `PugIdentity`; `PugClient` only adds the destroyed-client guard and routes the three notification helpers through `notificationEventProperties`. Push is not on the public surface (see `### Not On The Public Surface`). Push is provider-neutral at the API level through `PushProvider`. No concrete provider ships with the SDK; host apps supply their own `PushProvider` implementation. The notification received/clicked/dismissed tracking helpers on `PugPush` are implemented today; an FCM (or other) provider may be packaged as a separate add-on. All three notification helpers send immediately, since notification callbacks often fire while the app is backgrounded.
 
 Notification helper events:
 

@@ -4,6 +4,10 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter/pug_flutter.dart';
+// Campaign, push, and device registration are built but not on the public
+// surface: the backend does not accept them yet. Reach them through src/.
+import 'package:pug_flutter/src/campaign.dart';
+import 'package:pug_flutter/src/push_models.dart';
 
 class CapturingLogger implements PugLogger {
   final List<String> warnings = <String>[];
@@ -26,7 +30,7 @@ class CapturingLogger implements PugLogger {
   }
 }
 
-class FakeTransport implements PugTransport {
+class FakeTransport implements PugTransport, PugDeviceTransport {
   final List<Event> sent = <Event>[];
   final List<List<Event>> batches = <List<Event>>[];
   final List<IdentifyRequest> identifies = <IdentifyRequest>[];
@@ -106,10 +110,8 @@ PugClient testClient({
   MemoryPugStorage? storage,
   PugLogger? logger,
   PugAutoPropertyProvider? autoPropertyProvider,
-  PugLinkProvider? linkProvider,
   bool autoTrack = false,
   bool autoPageViews = false,
-  bool autoCaptureCampaigns = false,
   WidgetsBinding? lifecycleBinding,
 }) {
   final client = PugClient(
@@ -121,10 +123,8 @@ PugClient testClient({
       logger: logger ?? const NoopPugLogger(),
       autoPropertyProvider:
           autoPropertyProvider ?? const PugStaticAutoPropertyProvider({}),
-      linkProvider: linkProvider,
       autoTrack: autoTrack,
       autoPageViews: autoPageViews,
-      autoCaptureCampaigns: autoCaptureCampaigns,
       batch: const BatchConfig(maxWaitMs: 60000),
     ),
     clock: clock ?? FakeClock(1000),

@@ -1,8 +1,8 @@
 # Pug Flutter SDK
 
-Flutter SDK for Pug analytics, profile identity, session tracking, batching, and push device registration.
+Flutter SDK for Pug analytics, profile identity, session tracking, and batching.
 
-The SDK sends binary protobuf payloads to the Pug backend and keeps transport, storage, and push providers injectable for tests and custom integrations.
+The SDK sends binary protobuf payloads to the Pug backend and keeps transport and storage injectable for tests and custom integrations.
 
 Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`. The generated protobuf code targets the `protobuf` 6.x runtime (`>=6.0.0 <7.0.0`).
 
@@ -14,9 +14,7 @@ Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`. The generated protobuf co
 - Batched protobuf transport with `x-api-key` authentication.
 - `identify()` profile merge semantics with first-call anonymous ID linking.
 - Tracking consent gate with opt in/out and optional persistence.
-- Provider-neutral push registration.
-- Automatic campaign capture from app links and deep links.
-- Injectable storage, transport, clock, ID generator, logger, and push provider for tests.
+- Injectable storage, transport, clock, ID generator, and logger for tests.
 - Well-known event constants for the shared event catalog.
 - Shared-preferences-backed initialization with richer mobile auto-properties.
 
@@ -76,7 +74,7 @@ await Pug.init(
 
 `Pug.init(...)` uses shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type by default. To opt out of persistence, provide `storage: MemoryPugStorage()` or another custom `PugStorage`.
 
-Public SDK calls are best-effort and do not throw. `Pug.track()`, `Pug.identify()`, `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, `Pug.destroy()`, and `PugPush` helpers catch and log runtime failures. `Pug.init()` is the one exception: it throws synchronously on invalid input (empty `projectId`/`apiKey`) so a misconfiguration surfaces at the call site, but setup failures during startup are logged and swallowed. `Pug.identify()` never throws — invalid input and transport failures are logged and the future completes normally. Repeated init calls and `identify()` calls before init are ignored with a warning.
+Public SDK calls are best-effort and do not throw. `Pug.track()`, `Pug.identify()`, `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` catch and log runtime failures. `Pug.init()` is the one exception: it throws synchronously on invalid input (empty `projectId`/`apiKey`) so a misconfiguration surfaces at the call site, but setup failures during startup are logged and swallowed. `Pug.identify()` never throws — invalid input and transport failures are logged and the future completes normally. Repeated init calls and `identify()` calls before init are ignored with a warning.
 
 When `autoTrack` is enabled, the SDK tracks `app_open` when the app is already
 resumed at init or later enters foreground. It tracks `app_close` when the app
@@ -102,32 +100,10 @@ MaterialApp(
 
 After a route change, every event carries `$url` (the current route) and `$referrer` (the previous route) as auto-properties — matching the web SDK — so route context is not limited to navigation events. Route state updates whenever the observer reports a change, even if `autoPageViews` is disabled.
 
-Campaign capture is enabled by default. When the app receives an app link or
-deep link containing UTM-style query parameters, Pug stores the latest campaign
-context and attaches it to later events as auto-properties:
-
-- `$utmSource`
-- `$utmMedium`
-- `$utmCampaign`
-- `$utmTerm`
-- `$utmContent`
-- `$gclid`
-- `$fbclid`
-- `$msclkid`
-- `$ttclid`
-
-The host app must still configure platform deep linking, such as Android App
-Links, iOS Universal Links, or a custom URL scheme. To disable campaign capture:
-
-```dart
-await Pug.init(
-  'project-id',
-  const PugOptions(
-    apiKey: 'pug_api_key',
-    autoCaptureCampaigns: false,
-  ),
-);
-```
+Campaign capture from app links and deep links is implemented in the SDK but is
+not available yet: the backend does not accept campaign data, so nothing is
+captured and no `$utm*`/click-id auto-properties are attached. The code stays in
+the package and will be turned on in a later release.
 
 ## Auto Properties
 
@@ -149,7 +125,6 @@ with `$` to keep them distinct from your properties:
 | `$deviceManufacturer`, `$deviceModel` | Device identity, where available. |
 | `$networkType` | `wifi`, `mobile`, `ethernet`, `vpn`, `bluetooth`, `other`, `none`, or `unknown`. |
 | `$url`, `$referrer` | Current and previous route, once `PugRouteObserver` reports a change. |
-| `$utmSource` and the other campaign keys above | Latest captured campaign context. |
 
 `$platform` is a contract shared across the Pug SDKs rather than a Flutter
 detail: the values are lowercase so that a breakdown by platform reconciles
@@ -180,9 +155,7 @@ await Pug.init(
 Tracking consent gates event capture: `Pug.track(...)`, the typed
 `Pug.track.*` methods, `Pug.identify(...)`, and automatic
 lifecycle/page-view events are dropped while consent is denied,
-and resume once it is granted. Automatic campaign/deep-link capture is *not*
-gated — while denied it still records attribution locally, but transmits
-nothing until consent is granted.
+and resume once it is granted.
 
 Consent is **granted** by default. To start denied (for example, until the user
 accepts a consent prompt) and persist their choice across launches:
@@ -350,7 +323,7 @@ The first identify call includes the anonymous ID so the backend can merge anony
 ## Reset And Sessions
 
 The SDK stores a project-scoped device ID separately from session state. That
-device ID is reused for session records, identify calls, and push registration.
+device ID is reused for session records and identify calls.
 
 Rotate only the session and keep the same device ID:
 
@@ -378,28 +351,23 @@ await Pug.flush();
 
 ## Push Registration
 
-Push support is provider-neutral. Any provider can implement `PushProvider`.
+Push device registration and the notification tracking helpers are implemented
+in the SDK but are not available yet: the devices endpoint is not live, so
+`PugPush`, `PushProvider`, and `PushSubscribeOptions` are not exported from
+`package:pug_flutter/pug_flutter.dart`. The code stays in the package and will
+be turned on in a later release.
+
+The notification event kinds themselves are live and reachable through the typed
+API — `Pug.track.notificationClicked(...)`, `notificationReceived`, and
+`notificationDismissed` — if your app already receives notifications through its
+own push integration. Send them with `immediate: true`: notification callbacks
+often fire while the app is backgrounded, and a queued event is lost when the OS
+suspends the process before the next flush.
 
 ```dart
-class CustomPushProvider implements PushProvider {
-  @override
-  String get provider => 'custom';
-
-  @override
-  String get platform => 'android';
-
-  @override
-  Future<String> getToken() async => 'device-token';
-
-  @override
-  Future<void> deleteToken() async {}
-}
-
-await PugPush.subscribe(
-  CustomPushProvider(),
-  options: const PushSubscribeOptions(
-    properties: {'channel': 'stable'},
-  ),
+Pug.track.notificationClicked(
+  campaignId: message.data['campaignId'] as String? ?? '(unknown)',
+  options: const TrackOptions(immediate: true),
 );
 ```
 
@@ -423,9 +391,6 @@ class TestTransport implements PugTransport {
 
   @override
   Future<void> identify(IdentifyRequest request) async {}
-
-  @override
-  Future<void> subscribeDevice(PushSubscription subscription) async {}
 }
 
 await Pug.init(

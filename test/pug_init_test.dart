@@ -127,10 +127,7 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
 
-    final client = testClient(
-      logger: const ThrowingLogger(),
-      autoCaptureCampaigns: false,
-    );
+    final client = testClient(logger: const ThrowingLogger());
     await expectLater(client.identify(''), throwsA(isA<ArgumentError>()));
     await Pug.destroy();
     await expectLater(Pug.identify('user-before-init'), completes);

@@ -7,6 +7,8 @@ import 'package:pug_flutter/pug_flutter.dart';
 import 'package:pug_flutter/src/connect_transport.dart';
 import 'package:pug_flutter/src/event_queue_storage.dart';
 
+import 'package:pug_flutter/src/push_models.dart';
+
 import 'test_support.dart';
 
 void main() {
@@ -43,6 +45,41 @@ void main() {
     expect(afterReset['deviceId'], resetDevice);
     expect(storage.getString('__pug_project_external_id__'), isNull);
   });
+
+  test(
+    'reset clears profile identity and re-anonymizes later events',
+    () async {
+      final ids = SequenceIds();
+      final storage = MemoryPugStorage();
+      final client = testClient(ids: ids, storage: storage);
+
+      client.track('before');
+      final anonBefore = client.queue.peekUnlocked().last.distinctId;
+      expect(anonBefore, startsWith('anon-'));
+
+      await client.identify('user-1');
+      client.track('identified');
+      expect(client.queue.peekUnlocked().last.distinctId, 'user-1');
+      expect(storage.getString('__pug_project_external_id__'), 'user-1');
+
+      // reset() draws device, anonymous, then session, in that order.
+      final base = ids.value;
+      client.reset();
+
+      expect(readDeviceId(storage), 'id-${base + 1}');
+      expect(readSession(storage)['sessionId'], 'id-${base + 3}');
+      expect(storage.getString('__pug_project_external_id__'), isNull);
+
+      final profile = readProfile(storage);
+      expect(profile['externalId'], isNull);
+      expect(profile['anonymousId'], 'anon-id-${base + 2}');
+
+      client.track('after');
+      final after = client.queue.peekUnlocked().last;
+      expect(after.distinctId, 'anon-id-${base + 2}');
+      expect(after.distinctId, isNot(anonBefore));
+    },
+  );
 
   test(
     'identify first call includes anonymous id and device id and later calls omit both',

@@ -4,6 +4,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pug_flutter/pug_flutter.dart';
 
+import 'package:pug_flutter/src/push.dart';
+
 import 'test_support.dart';
 
 void main() {

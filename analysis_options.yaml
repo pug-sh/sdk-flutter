@@ -4,6 +4,22 @@ analyzer:
   exclude:
     - lib/src/gen/**
     - test/compile_fail/**
+    # Quoted and **-prefixed: a bare `**/...` is a YAML alias, and the platform
+    # scaffolding lives under example/, not at the package root.
+    - "**/build/**"
+    - "**/android/**"
+    - "**/ios/**"
+    - "**/linux/**"
+    - "**/macos/**"
+    - "**/web/**"
+    - "**/windows/**"
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
   language:
     strict-casts: true
     strict-inference: true

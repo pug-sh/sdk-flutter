@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 import 'auto_properties.dart';
 import 'configuration.dart';
 import 'contracts.dart';
+import 'route_observer.dart';
 import 'runtime.dart';
 import 'shared_preferences_storage.dart';
 import 'track_namespace.dart';
