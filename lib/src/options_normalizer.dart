@@ -17,6 +17,7 @@ PugOptions normalizePugOptions(PugOptions options) {
     session: options.session,
     autoTrack: options.autoTrack,
     autoPageViews: options.autoPageViews,
+    autoInstallEvents: options.autoInstallEvents,
     dryRun: options.dryRun,
     trackingConsent: options.trackingConsent,
     logger: SafePugLogger(options.logger),

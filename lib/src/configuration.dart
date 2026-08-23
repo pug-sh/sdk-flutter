@@ -10,6 +10,7 @@ class PugOptions {
     this.session = const SessionConfig(),
     this.autoTrack = true,
     this.autoPageViews = true,
+    this.autoInstallEvents = true,
     this.dryRun = false,
     this.trackingConsent = const TrackingConsentConfig(),
     this.logger = const NoopPugLogger(),
@@ -24,6 +25,13 @@ class PugOptions {
   final SessionConfig session;
   final bool autoTrack;
   final bool autoPageViews;
+
+  /// Emits `app_install` on the first launch the SDK sees on a device and
+  /// `app_update` on the first launch after the app version changes.
+  ///
+  /// Independent of [autoTrack], like [autoPageViews]: it is a one-shot check
+  /// at start, not a lifecycle subscription.
+  final bool autoInstallEvents;
   final bool dryRun;
   final TrackingConsentConfig trackingConsent;
   final PugLogger logger;
@@ -38,6 +46,7 @@ class PugOptions {
     SessionConfig? session,
     bool? autoTrack,
     bool? autoPageViews,
+    bool? autoInstallEvents,
     bool? dryRun,
     TrackingConsentConfig? trackingConsent,
     PugLogger? logger,
@@ -52,6 +61,7 @@ class PugOptions {
       session: session ?? this.session,
       autoTrack: autoTrack ?? this.autoTrack,
       autoPageViews: autoPageViews ?? this.autoPageViews,
+      autoInstallEvents: autoInstallEvents ?? this.autoInstallEvents,
       dryRun: dryRun ?? this.dryRun,
       trackingConsent: trackingConsent ?? this.trackingConsent,
       logger: logger ?? this.logger,

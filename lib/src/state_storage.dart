@@ -18,6 +18,23 @@ class PugStorageKeys {
   String get queue => '__pug_${projectId}_queue__';
   String get campaign => '__pug_${projectId}_campaign__';
   String get consent => '__pug_${projectId}_consent__';
+  String get lastVersion => '__pug_${projectId}_last_version__';
+
+  /// Every project-scoped key the SDK owns, in the order they are documented.
+  ///
+  /// `InstallTracker` probes this to tell a fresh install from an app that
+  /// already had Pug on it, so a key that is added here but not to the purge in
+  /// `PugClient.destroy()` (or the other way round) changes install detection.
+  List<String> get all => [
+    session,
+    profile,
+    deviceId,
+    externalId,
+    queue,
+    campaign,
+    consent,
+    lastVersion,
+  ];
 }
 
 Map<String, Object?>? decodeStoredJsonMap(String raw, PugLogger logger) {

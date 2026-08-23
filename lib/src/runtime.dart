@@ -13,6 +13,7 @@ import 'dispatcher.dart';
 import 'event_queue_storage.dart';
 import 'events.dart';
 import 'identity.dart';
+import 'install_tracker.dart';
 import 'lifecycle.dart';
 import 'navigation.dart';
 import 'options_normalizer.dart';
@@ -90,6 +91,20 @@ class PugClient with WidgetsBindingObserver {
       logger: _options.logger,
       capture: (kind, props) => track(kind, props: props),
     );
+    _install = InstallTracker(
+      enabled: _options.autoInstallEvents,
+      keys: _keys,
+      storage: _storage,
+      logger: _options.logger,
+      autoProperties: _autoPropertyProvider.properties,
+      capture: (kind, props) {
+        if (_disposed || !_consent.isGranted) {
+          return false;
+        }
+        track(kind, props: props);
+        return true;
+      },
+    );
     _lifecycle = AppLifecycleTracker(
       autoTrack: _options.autoTrack,
       capture: (kind, {required immediate}) {
@@ -131,6 +146,7 @@ class PugClient with WidgetsBindingObserver {
   late final CampaignTracker _campaign;
   late final PushManager _push;
   late final NavigationTracker _navigation;
+  late final InstallTracker _install;
   late final AppLifecycleTracker _lifecycle;
   bool _disposed = false;
   bool _started = false;
@@ -186,6 +202,11 @@ class PugClient with WidgetsBindingObserver {
       // campaign data yet, so the tracker only purges stale state on destroy.
       // Re-enabling is `await _campaign.start()` here, the campaign properties
       // in _createEvent, and the barrel export of campaign.dart.
+      // Before syncInitialState so a launch app_install/app_update precedes the
+      // launch app_open, and before anything else here writes a project key:
+      // the install branch's prior-state probe would otherwise see this
+      // launch's own state and read a fresh install as an upgrade-in-place.
+      _install.check();
       _lifecycle.syncInitialState(_lifecycleBinding?.lifecycleState);
       _dispatcher.scheduleFlush();
     } catch (error, stackTrace) {
@@ -382,6 +403,7 @@ class PugClient with WidgetsBindingObserver {
           _identity.clear();
           _campaign.clear();
           _storage.remove(_keys.queue);
+          _storage.remove(_keys.lastVersion);
         } else {
           _options.logger.debug(
             'Pug.destroy left the stored state for "$projectId" alone: this '
