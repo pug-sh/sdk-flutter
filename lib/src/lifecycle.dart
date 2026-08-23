@@ -38,7 +38,12 @@ class AppLifecycleTracker {
           _isForeground = true;
           _capture('app_open', immediate: false);
         }
+      // `inactive` is a transient loss of input focus with the app still
+      // visible — an incoming call, the app switcher, a control-centre swipe —
+      // so it is not a backgrounding. Real backgrounding always passes through
+      // `hidden`/`paused` before the OS suspends the process.
       case AppLifecycleState.inactive:
+        break;
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:

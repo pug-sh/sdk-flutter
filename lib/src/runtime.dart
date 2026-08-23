@@ -127,6 +127,15 @@ class PugClient with WidgetsBindingObserver {
   bool _disposed = false;
   bool _started = false;
 
+  /// The client that currently owns each project's storage namespace.
+  ///
+  /// `Pug.destroy()` detaches the singleton synchronously but tears down
+  /// asynchronously, so a follow-up `init()` can start a replacement client on
+  /// the same keys while the outgoing one is still awaiting its final flush.
+  /// The purge in [destroy] consults this so it cannot delete the
+  /// replacement's identity, consent, or queue state.
+  static final Map<String, PugClient> _storageOwners = <String, PugClient>{};
+
   /// Exposed so `Pug.logger` can surface the configured logger to callers
   /// (notably `TrackNamespace`) post-init. Safe to call before `start()`.
   PugLogger get logger => _options.logger;
@@ -147,6 +156,7 @@ class PugClient with WidgetsBindingObserver {
         return;
       }
       _lifecycleBinding?.addObserver(this);
+      _storageOwners[projectId] = this;
       _started = true;
       // Campaign capture is built but not started: the backend does not accept
       // campaign data yet, so the tracker only purges stale state on destroy.
@@ -318,9 +328,18 @@ class PugClient with WidgetsBindingObserver {
       if (PugRouteObserver.onRouteChanged == notifyRouteChanged) {
         PugRouteObserver.onRouteChanged = null;
       }
-      _identity.clear();
-      _campaign.clear();
-      _storage.remove(_keys.queue);
+      final owner = _storageOwners[projectId];
+      if (owner == null || identical(owner, this)) {
+        _storageOwners.remove(projectId);
+        _identity.clear();
+        _campaign.clear();
+        _storage.remove(_keys.queue);
+      } else {
+        _options.logger.debug(
+          'Pug.destroy kept the stored state for "$projectId": a newer client '
+          'now owns that storage namespace.',
+        );
+      }
       _navigation.clear();
       _disposed = true;
     }

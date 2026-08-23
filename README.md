@@ -77,8 +77,10 @@ await Pug.init(
 Public SDK calls are best-effort and do not throw. `Pug.track()`, `Pug.identify()`, `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` catch and log runtime failures. `Pug.init()` is the one exception: it throws synchronously on invalid input (empty `projectId`/`apiKey`) so a misconfiguration surfaces at the call site, but setup failures during startup are logged and swallowed. `Pug.identify()` never throws — invalid input and transport failures are logged and the future completes normally. Repeated init calls and `identify()` calls before init are ignored with a warning.
 
 When `autoTrack` is enabled, the SDK tracks `app_open` when the app is already
-resumed at init or later enters foreground. It tracks `app_close` when the app
-leaves foreground.
+resumed at init or later enters foreground. It tracks `app_close` when the app is
+backgrounded — `hidden`, `paused`, or `detached`. A transient `inactive` state is
+not a close: the app is still visible during an incoming call, a control-centre
+swipe, or the app switcher.
 
 When `autoPageViews` is enabled (default), the SDK tracks a navigation event when
 the user navigates between routes: `screen_view` (with a `screenName` property) on

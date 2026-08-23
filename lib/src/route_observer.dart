@@ -3,24 +3,31 @@ import 'package:flutter/widgets.dart';
 class PugRouteObserver extends NavigatorObserver {
   static void Function(String?, String?)? onRouteChanged;
 
+  /// The single source of top-route transitions. `Navigator` calls this after
+  /// any push/pop/replace/remove that actually changes the topmost route, so
+  /// per-operation callbacks would double-report and — for `didRemove` — report
+  /// a route that is not on top: removing `/b` from `/a → /b → /c` hands
+  /// `didRemove` the route *below* the removed one (`/a`) while `/c` is still
+  /// visible.
   @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    _onRouteChanged(_routeName(route), _routeName(previousRoute));
+  void didChangeTop(Route<dynamic> topRoute, Route<dynamic>? previousTopRoute) {
+    _onRouteChanged(_routeName(topRoute), _routeName(previousTopRoute));
   }
 
+  /// `didChangeTop` is not called when the stack empties, so the two callbacks
+  /// that can empty it report the null route themselves.
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    _onRouteChanged(_routeName(previousRoute), _routeName(route));
-  }
-
-  @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    _onRouteChanged(_routeName(newRoute), _routeName(oldRoute));
+    if (previousRoute == null) {
+      _onRouteChanged(null, _routeName(route));
+    }
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    _onRouteChanged(_routeName(previousRoute), null);
+    if (previousRoute == null) {
+      _onRouteChanged(null, _routeName(route));
+    }
   }
 
   void _onRouteChanged(String? url, String? referrer) {

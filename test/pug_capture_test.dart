@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/widgets.dart';
@@ -258,14 +260,79 @@ void main() {
     addTearDown(() => PugRouteObserver.onRouteChanged = null);
 
     final observer = PugRouteObserver();
-    observer.didPush(NamedRoute('/home'), NamedRoute('/'));
-    observer.didPush(NamedRoute('/profile'), NamedRoute('/home'));
+    observer.didChangeTop(NamedRoute('/home'), NamedRoute('/'));
+    observer.didChangeTop(NamedRoute('/profile'), NamedRoute('/home'));
 
     final events = client.queue.peekUnlocked();
     expect(events.map((event) => event.kind), everyElement('screen_view'));
     expect(events.last.customProperties['screenName']?.value, '/profile');
     expect(events.last.autoProperties[r'$url']?.value, '/profile');
     expect(events.last.autoProperties[r'$referrer']?.value, '/home');
+  });
+
+  testWidgets('removing a route below the top leaves the tracked route alone', (
+    tester,
+  ) async {
+    final client = testClient(autoPageViews: true);
+    PugRouteObserver.onRouteChanged = client.notifyRouteChanged;
+    addTearDown(() => PugRouteObserver.onRouteChanged = null);
+
+    Route<void> page(String name) => PageRouteBuilder<void>(
+      settings: RouteSettings(name: name),
+      pageBuilder:
+          (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+    );
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      WidgetsApp(
+        navigatorKey: navigatorKey,
+        navigatorObservers: [PugRouteObserver()],
+        color: const Color(0xFF000000),
+        onGenerateRoute: (settings) => page(settings.name ?? '/'),
+      ),
+    );
+
+    final navigator = navigatorKey.currentState!;
+    final middle = page('/b');
+    unawaited(navigator.push(middle));
+    await tester.pumpAndSettle();
+    unawaited(navigator.push(page('/c')));
+    await tester.pumpAndSettle();
+
+    final before = client.queue.peekUnlocked().length;
+    // `didRemove` reports the route *below* the removed one, so acting on it
+    // here would report '/' while '/c' is still on screen.
+    navigator.removeRoute(middle);
+    await tester.pumpAndSettle();
+
+    final events = client.queue.peekUnlocked();
+    expect(events.length, before);
+    expect(events.last.customProperties['screenName']?.value, '/c');
+    expect(events.last.autoProperties[r'$url']?.value, '/c');
+
+    // testWidgets fails the test on a pending timer, and the tear-down destroy
+    // that cancels the flush timer runs after that check.
+    await client.destroy();
+  });
+
+  test('inactive is not treated as backgrounding', () async {
+    final transport = FakeTransport();
+    final client = testClient(transport: transport, autoTrack: true);
+
+    client.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    client.track('one');
+    client.didChangeAppLifecycleState(AppLifecycleState.inactive);
+    await Future<void>.delayed(Duration.zero);
+
+    // An incoming call or the app switcher is not an app_close, and must not
+    // trigger the backgrounding flush either.
+    expect(transport.batches, isEmpty);
+    expect(transport.sent, isEmpty);
+    expect(client.queue.peekUnlocked().map((event) => event.kind), [
+      'app_open',
+      'one',
+    ]);
   });
 
   test('notification received and dismissed are sent immediately', () async {

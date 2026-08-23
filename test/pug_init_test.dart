@@ -251,6 +251,30 @@ void main() {
   });
 
   test(
+    'destroy does not purge state written by a replacement client',
+    () async {
+      final storage = MemoryPugStorage();
+      final first = testClient(storage: storage);
+      first.track('one');
+
+      // destroy() awaits a final flush, so a follow-up init() can start a
+      // replacement on the same project keys before this teardown resumes.
+      final teardown = first.destroy();
+      final second = testClient(storage: storage);
+      second.track('two');
+      await teardown;
+
+      expect(storage.getString('__pug_project_queue__'), isNotNull);
+      expect(readDeviceId(storage), isNotNull);
+      expect(readSession(storage), isNotEmpty);
+      expect(
+        second.queue.peekUnlocked().map((event) => event.kind),
+        contains('two'),
+      );
+    },
+  );
+
+  test(
     'destroy detaches the singleton synchronously for immediate re-init',
     () async {
       await Pug.init(
