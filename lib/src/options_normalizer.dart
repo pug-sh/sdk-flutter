@@ -23,6 +23,7 @@ PugOptions normalizePugOptions(PugOptions options) {
     logger: SafePugLogger(options.logger),
     storage: options.storage,
     transport: options.transport,
+    httpClient: options.httpClient,
     autoPropertyProvider: options.autoPropertyProvider,
   );
 }

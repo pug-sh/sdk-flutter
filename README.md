@@ -15,6 +15,7 @@ Requires Dart `>=3.7.0 <4.0.0` and Flutter `>=3.29.0`. The generated protobuf co
 - `identify()` profile merge semantics with first-call anonymous ID linking.
 - Tracking consent gate with opt in/out and optional persistence.
 - Injectable storage, transport, clock, ID generator, and logger for tests.
+- Any `package:http` client, such as `cupertino_http` or `cronet_http`, in place of `dart:io`'s `HttpClient`.
 - Well-known event constants for the shared event catalog.
 - Shared-preferences-backed initialization with richer mobile auto-properties.
 
@@ -388,6 +389,24 @@ Pug.track.notificationClicked(
   options: const TrackOptions(immediate: true),
 );
 ```
+
+## Custom HTTP Client
+
+By default the SDK sends through `package:http`'s default client, which is `dart:io`'s `HttpClient` on Android, iOS, and desktop, and the browser's on web. To send through the platform's own networking stack instead, or through a client your app already configures, pass any `package:http` `Client` as `httpClient`:
+
+```dart
+import 'package:cupertino_http/cupertino_http.dart';
+
+await Pug.init(
+  'project-id',
+  PugOptions(
+    apiKey: 'pug_api_key',
+    httpClient: CupertinoClient.defaultSessionConfiguration(),
+  ),
+);
+```
+
+On Android, `CronetClient.defaultCronetEngine()` from `cronet_http` does the same. Your app owns the client: the SDK never closes it, including in `Pug.destroy()`, so you can pass the same client to a later `Pug.init()`. `httpClient` is ignored when you also set a custom `transport`, and the SDK logs a warning.
 
 ## Custom Transport Or Storage
 

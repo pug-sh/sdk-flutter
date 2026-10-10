@@ -43,11 +43,17 @@ class PugClient with WidgetsBindingObserver {
          fallback: MemoryPugStorage(),
          logger: SafePugLogger(options.logger),
        ) {
+    if (_options.transport != null && _options.httpClient != null) {
+      _options.logger.warn(
+        'Pug ignores PugOptions.httpClient when a custom transport is set.',
+      );
+    }
     _transport =
         _options.transport ??
         ConnectPugTransport(
           endpoint: _options.endpoint,
           apiKey: _options.apiKey,
+          httpClient: _options.httpClient,
         );
     _dispatcher = EventDispatcher(
       queue: PugEventQueue(
