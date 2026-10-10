@@ -1,4 +1,4 @@
-## Unreleased
+## 0.0.6
 
 * Regenerate the protobuf code for the backend's cookieless contract. This alone
   changes nothing on the wire: the SDK never sets the new `Event.cookieless`
