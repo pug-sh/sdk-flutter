@@ -22,9 +22,13 @@ class UuidV7Generator implements PugIdGenerator {
   @override
   String nextId() {
     final bytes = Uint8List(16);
-    final now = DateTime.now().millisecondsSinceEpoch;
-    for (var i = 0; i < 6; i += 1) {
-      bytes[i] = (now >> (8 * (5 - i))) & 0xff;
+    // The 48-bit millisecond timestamp, big-endian. Division rather than
+    // shifts: compiled to JavaScript, `>>` works on 32 bits and drops the top
+    // two bytes, while `%` and `~/` stay exact below 2^53.
+    var timestamp = DateTime.now().millisecondsSinceEpoch;
+    for (var i = 5; i >= 0; i -= 1) {
+      bytes[i] = timestamp % 256;
+      timestamp ~/= 256;
     }
     for (var i = 6; i < 16; i += 1) {
       bytes[i] = _random.nextInt(256);

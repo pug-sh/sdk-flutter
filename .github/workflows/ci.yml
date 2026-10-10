@@ -97,3 +97,27 @@ jobs:
           name: coverage-lcov
           path: coverage/lcov.info
           if-no-files-found: warn
+
+  web-test:
+    name: Web tests (Chrome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # The VM run above skips test/web (`@TestOn('browser')`). Web-only bugs
+      # cannot reproduce there: kIsWeb is a compile-time false and ints are 64
+      # bits. GitHub's Ubuntu runners ship Chrome.
+      - name: Test in Chrome
+        run: flutter test --platform chrome test/web

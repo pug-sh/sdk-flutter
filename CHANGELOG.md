@@ -1,3 +1,15 @@
+## Unreleased
+
+* Fix Flutter web, where no events were sent. Building each event read
+  `Platform.operatingSystem`, which throws on web, so every `track()` call and
+  every automatic event failed, and the default logger discarded the error.
+* On web, `$os` and `$osVersion` now come from the browser's user-agent client
+  hints, read the way `@pug-sh/browser` reads them. They are omitted in browsers
+  without client hints (Safari, Firefox).
+* Fix the UUIDv7 IDs generated on web. Compiled to JavaScript, their timestamp
+  lost its top 16 bits, so event, session, device, and anonymous IDs did not
+  sort by time.
+
 ## 0.0.6
 
 * Regenerate the protobuf code for the backend's cookieless contract. This alone

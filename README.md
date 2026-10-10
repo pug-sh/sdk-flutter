@@ -130,8 +130,8 @@ with `$` to keep them distinct from your properties:
 | `$sdkVersion` | This package's version. |
 | `$platform` | `web` on Flutter web, otherwise the lowercase operating system reported by the target — `android`, `ios`, `macos`, `linux`, `windows`, and `fuchsia` today, with any other value passed through as-is. |
 | `$deviceType` | `tv`, `mobile`, or `desktop`. Omitted on web, where the host device is not detectable. Android TV reports `$platform: android` with `$deviceType: tv`. |
-| `$os` | The operating system. Equals `$platform` on native targets. |
-| `$osVersion` | The operating system version. |
+| `$os` | The operating system. Equals `$platform` on native targets. On web it is the browser's `navigator.userAgentData.platform`, such as `macOS` or `Windows`, as `@pug-sh/browser` reports it, and is omitted in browsers without user-agent client hints (Safari, Firefox). |
+| `$osVersion` | The operating system version. On web, the `platformVersion` client hint where the browser provides it. |
 | `$locale` | BCP 47 language tag, such as `en-US`. |
 | `$timezone` | IANA identifier, such as `Asia/Kolkata`. Falls back to the platform abbreviation when unavailable. |
 | `$screenWidth`, `$screenHeight`, `$screenScale` | Logical screen size and device pixel ratio. |
