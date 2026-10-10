@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -162,6 +163,117 @@ void main() {
       expect(storage.getString('__pug_project_external_id__'), isNull);
     },
   );
+
+  test(
+    'identify rejects the reserved cookieless- prefix without sending',
+    () async {
+      final transport = FakeTransport();
+      final storage = MemoryPugStorage();
+      final client = testClient(transport: transport, storage: storage);
+
+      await expectLater(
+        client.identify('cookieless-abc'),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(transport.identifies, isEmpty);
+      expect(storage.getString('__pug_project_external_id__'), isNull);
+    },
+  );
+
+  test(
+    'a stored external id with the reserved prefix is discarded on restore',
+    () async {
+      final storage =
+          MemoryPugStorage()
+            ..setString(
+              '__pug_project_profile__',
+              jsonEncode({
+                'anonymousId': 'anon-stored',
+                'externalId': 'cookieless-abc',
+              }),
+            )
+            ..setString('__pug_project_external_id__', 'cookieless-abc');
+      final logger = CapturingLogger();
+      final transport = FakeTransport();
+      final client = testClient(
+        storage: storage,
+        logger: logger,
+        transport: transport,
+      );
+
+      client.track('after_restore');
+
+      expect(client.queue.peekUnlocked().last.distinctId, 'anon-stored');
+      expect(readProfile(storage), {'anonymousId': 'anon-stored'});
+      expect(storage.getString('__pug_project_external_id__'), isNull);
+      expect(logger.warnings, contains(contains('reserved "cookieless-"')));
+
+      // The discarded id no longer counts, so the next identify is a first
+      // identify and carries the anonymous id for the backend merge.
+      await client.identify('user-1');
+      expect(transport.identifies.single.anonymousId, 'anon-stored');
+    },
+  );
+
+  test('a reserved external id seeding a missing profile is discarded', () {
+    final storage =
+        MemoryPugStorage()
+          ..setString('__pug_project_external_id__', 'cookieless-abc');
+    final client = testClient(storage: storage);
+
+    client.track('after_restore');
+
+    expect(client.queue.peekUnlocked().last.distinctId, startsWith('anon-'));
+    expect(readProfile(storage)['externalId'], isNull);
+    expect(storage.getString('__pug_project_external_id__'), isNull);
+  });
+
+  test('a legitimate external id seeding a missing profile is restored', () {
+    final storage =
+        MemoryPugStorage()..setString('__pug_project_external_id__', 'user-1');
+    final logger = CapturingLogger();
+    final client = testClient(storage: storage, logger: logger);
+
+    client.track('after_restore');
+
+    expect(client.queue.peekUnlocked().last.distinctId, 'user-1');
+    expect(readProfile(storage)['externalId'], 'user-1');
+    expect(storage.getString('__pug_project_external_id__'), 'user-1');
+    expect(logger.warnings, isNot(contains(contains('reserved'))));
+  });
+
+  test('queued events with a reserved distinct id are discarded on load', () {
+    final storage =
+        MemoryPugStorage()..setString(
+          'queue',
+          jsonEncode([
+            {...fakeEvent('stale').toJson(), 'distinctId': 'cookieless-abc'},
+            fakeEvent('kept').toJson(),
+          ]),
+        );
+    final logger = CapturingLogger();
+    final queue = PugEventQueue(
+      key: 'queue',
+      storage: storage,
+      logger: logger,
+      maxQueueSize: 10,
+    );
+
+    expect(queue.peekUnlocked().single.kind, 'kept');
+    expect(logger.warnings, contains(contains('discarded 1 queued events')));
+  });
+
+  test('a corrupt stored profile is not echoed into the debug log', () {
+    final storage =
+        MemoryPugStorage()
+          ..setString('__pug_project_profile__', '{"externalId":"user-1"');
+    final logger = CapturingLogger();
+    testClient(storage: storage, logger: logger).track('after_corrupt');
+
+    expect(logger.warnings, contains('Pug stored JSON could not be decoded.'));
+    expect(logger.debugs, isNot(contains(contains('user-1'))));
+  });
 
   test(
     'transient transport errors rollback and permanent errors drop',

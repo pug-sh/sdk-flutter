@@ -35,27 +35,34 @@ class SharedPreferencesPugStorage implements PugStorage {
   String? getString(String key) => preferences.getString(key);
 
   @override
-  void remove(String key) {
-    // The plugin call is async; attach a handler so a rejected future is
-    // observed and logged instead of becoming an unhandled error or a silent
-    // no-op. Log only the key plus the error for diagnosis.
-    unawaited(
-      _removeKey(key).catchError((Object error) {
-        logger?.warn('Pug could not remove "$key" from persistent storage.');
-        logger?.debug(error.toString());
-        return false;
-      }),
-    );
-  }
+  void remove(String key) => _observe(
+    _removeKey(key),
+    'Pug could not remove "$key" from persistent storage.',
+  );
 
   @override
-  void setString(String key, String value) {
+  void setString(String key, String value) => _observe(
+    _writeString(key, value),
+    'Pug could not persist "$key" to persistent storage.',
+  );
+
+  // The plugin call is async, and a failed write surfaces either as a rejected
+  // future or as `false` (Android's `commit()` result). Observe both so neither
+  // becomes an unhandled error or a silent no-op. Log only the key plus the
+  // error for diagnosis.
+  void _observe(Future<bool> write, String failure) {
     unawaited(
-      _writeString(key, value).catchError((Object error) {
-        logger?.warn('Pug could not persist "$key" to persistent storage.');
-        logger?.debug(error.toString());
-        return false;
-      }),
+      write.then(
+        (written) {
+          if (!written) {
+            logger?.warn(failure);
+          }
+        },
+        onError: (Object error) {
+          logger?.warn(failure);
+          logger?.debug(error.toString());
+        },
+      ),
     );
   }
 }

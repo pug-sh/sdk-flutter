@@ -175,7 +175,7 @@ class Pug implements TrackContext {
       // Best-effort: identify never throws. Invalid input and transport
       // failures (raised by the client) are logged and swallowed here so a
       // failed identify cannot crash the host app.
-      _fallbackLogger.error('Pug identify failed.', error, stackTrace);
+      client.logger.error('Pug identify failed.', error, stackTrace);
     }
   }
 
@@ -183,7 +183,7 @@ class Pug implements TrackContext {
     try {
       _client?.reset();
     } catch (error, stackTrace) {
-      _fallbackLogger.error('Pug reset failed.', error, stackTrace);
+      logger.error('Pug reset failed.', error, stackTrace);
     }
   }
 
@@ -191,7 +191,7 @@ class Pug implements TrackContext {
     try {
       _client?.rotate();
     } catch (error, stackTrace) {
-      _fallbackLogger.error('Pug rotate failed.', error, stackTrace);
+      logger.error('Pug rotate failed.', error, stackTrace);
     }
   }
 
@@ -199,7 +199,7 @@ class Pug implements TrackContext {
     try {
       await _client?.flushAll();
     } catch (error, stackTrace) {
-      _fallbackLogger.error('Pug flush failed.', error, stackTrace);
+      logger.error('Pug flush failed.', error, stackTrace);
     }
   }
 
@@ -220,7 +220,7 @@ class Pug implements TrackContext {
     try {
       await client.destroy();
     } catch (error, stackTrace) {
-      _fallbackLogger.error('Pug destroy failed.', error, stackTrace);
+      client.logger.error('Pug destroy failed.', error, stackTrace);
     } finally {
       _pendingTeardown = null;
     }
@@ -237,7 +237,7 @@ class Pug implements TrackContext {
     try {
       client.optInTracking();
     } catch (error, stackTrace) {
-      _fallbackLogger.error('Pug optInTracking failed.', error, stackTrace);
+      client.logger.error('Pug optInTracking failed.', error, stackTrace);
     }
   }
 
@@ -252,7 +252,7 @@ class Pug implements TrackContext {
     try {
       client.optOutTracking();
     } catch (error, stackTrace) {
-      _fallbackLogger.error('Pug optOutTracking failed.', error, stackTrace);
+      client.logger.error('Pug optOutTracking failed.', error, stackTrace);
     }
   }
 

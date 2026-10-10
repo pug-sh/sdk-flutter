@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'contracts.dart';
 import 'events.dart';
+import 'identity.dart';
 
 class PugEventQueue {
   PugEventQueue({
@@ -91,6 +92,18 @@ class PugEventQueue {
         if (item is Map<Object?, Object?>) {
           events.add(Event.fromJson(_stringObjectMap(item)));
         }
+      }
+      // Queued before PugIdentity discarded a reserved external ID. The server
+      // rejects any batch holding one, healthy events included.
+      final restored = events.length;
+      events.removeWhere(
+        (event) => event.distinctId.startsWith(reservedDistinctIdPrefix),
+      );
+      if (events.length < restored) {
+        _logger.warn(
+          'Pug discarded ${restored - events.length} queued events whose '
+          'distinct ID uses the reserved "$reservedDistinctIdPrefix" prefix.',
+        );
       }
       return events;
     } catch (_) {

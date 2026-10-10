@@ -72,9 +72,14 @@ class BatchCreateRequest extends $pb.GeneratedMessage {
 class BatchCreateResponse extends $pb.GeneratedMessage {
   factory BatchCreateResponse({
     $core.int? accepted,
+    $core.int? dropped,
+    $core.Iterable<$core.MapEntry<$core.String, $core.int>>? droppedByReason,
   }) {
     final result = create();
     if (accepted != null) result.accepted = accepted;
+    if (dropped != null) result.dropped = dropped;
+    if (droppedByReason != null)
+      result.droppedByReason.addEntries(droppedByReason);
     return result;
   }
 
@@ -92,6 +97,12 @@ class BatchCreateResponse extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'sdk.events.v1'),
       createEmptyInstance: create)
     ..aI(1, _omitFieldNames ? '' : 'accepted', fieldType: $pb.PbFieldType.OU3)
+    ..aI(2, _omitFieldNames ? '' : 'dropped', fieldType: $pb.PbFieldType.OU3)
+    ..m<$core.String, $core.int>(3, _omitFieldNames ? '' : 'droppedByReason',
+        entryClassName: 'BatchCreateResponse.DroppedByReasonEntry',
+        keyFieldType: $pb.PbFieldType.OS,
+        valueFieldType: $pb.PbFieldType.OU3,
+        packageName: const $pb.PackageName('sdk.events.v1'))
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -121,6 +132,27 @@ class BatchCreateResponse extends $pb.GeneratedMessage {
   $core.bool hasAccepted() => $_has(0);
   @$pb.TagNumber(1)
   void clearAccepted() => $_clearField(1);
+
+  /// Events the server refused to ingest; accepted + dropped equals the number
+  /// sent. A drop is deliberately not an error: a batch may legitimately mix
+  /// cookieless and consented events, so failing the request would discard
+  /// healthy traffic to report a fault affecting only part of it. That makes
+  /// this field the only signal to the caller that anything was lost.
+  @$pb.TagNumber(2)
+  $core.int get dropped => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set dropped($core.int value) => $_setUnsignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasDropped() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearDropped() => $_clearField(2);
+
+  /// Per-reason breakdown of `dropped`, keyed by a stable reason token. This is
+  /// what makes a drop actionable rather than merely visible: `salt_unavailable`
+  /// is a server-side fault and the same payload may be retried, whereas
+  /// `day_out_of_range` is client clock skew that will drop again on every retry.
+  @$pb.TagNumber(3)
+  $pb.PbMap<$core.String, $core.int> get droppedByReason => $_getMap(2);
 }
 
 class Event extends $pb.GeneratedMessage {
@@ -134,6 +166,7 @@ class Event extends $pb.GeneratedMessage {
     $core.String? kind,
     $0.Timestamp? occurTime,
     $core.String? sessionId,
+    $core.bool? cookieless,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -145,6 +178,7 @@ class Event extends $pb.GeneratedMessage {
     if (kind != null) result.kind = kind;
     if (occurTime != null) result.occurTime = occurTime;
     if (sessionId != null) result.sessionId = sessionId;
+    if (cookieless != null) result.cookieless = cookieless;
     return result;
   }
 
@@ -183,6 +217,7 @@ class Event extends $pb.GeneratedMessage {
     ..aOM<$0.Timestamp>(6, _omitFieldNames ? '' : 'occurTime',
         subBuilder: $0.Timestamp.create)
     ..aOS(7, _omitFieldNames ? '' : 'sessionId')
+    ..aOB(8, _omitFieldNames ? '' : 'cookieless')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -218,6 +253,9 @@ class Event extends $pb.GeneratedMessage {
   @$pb.TagNumber(3)
   $pb.PbMap<$core.String, $1.PropertyValue> get customProperties => $_getMap(2);
 
+  /// Empty only when cookieless (event.identity_required_unless_cookieless);
+  /// never client-settable to a 'cookieless-'-prefixed value
+  /// (batch.distinct_id_reserved_prefix).
   @$pb.TagNumber(4)
   $core.String get distinctId => $_getSZ(3);
   @$pb.TagNumber(4)
@@ -248,6 +286,8 @@ class Event extends $pb.GeneratedMessage {
   @$pb.TagNumber(6)
   $0.Timestamp ensureOccurTime() => $_ensure(5);
 
+  /// A UUID whenever set; omit entirely in cookieless mode (an explicit "" is
+  /// also rejected — set fields must satisfy the uuid rule).
   @$pb.TagNumber(7)
   $core.String get sessionId => $_getSZ(6);
   @$pb.TagNumber(7)
@@ -256,6 +296,18 @@ class Event extends $pb.GeneratedMessage {
   $core.bool hasSessionId() => $_has(6);
   @$pb.TagNumber(7)
   void clearSessionId() => $_clearField(7);
+
+  /// Cookieless (no-consent) mode: the client stores nothing on the device and
+  /// sends no identity; the ingest server derives an ephemeral daily-rotating
+  /// distinct_id and a stitched session_id. See docs/architecture/ingestion.md.
+  @$pb.TagNumber(8)
+  $core.bool get cookieless => $_getBF(7);
+  @$pb.TagNumber(8)
+  set cookieless($core.bool value) => $_setBool(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasCookieless() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearCookieless() => $_clearField(8);
 }
 
 class EventBatch extends $pb.GeneratedMessage {

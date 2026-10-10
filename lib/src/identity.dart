@@ -5,6 +5,10 @@ import 'configuration.dart';
 import 'contracts.dart';
 import 'state_storage.dart';
 
+/// The server mints cookieless identities with this prefix and rejects any
+/// client-sent `distinct_id` or `external_id` that carries it.
+const String reservedDistinctIdPrefix = 'cookieless-';
+
 class SessionState {
   const SessionState({
     required this.sessionId,
@@ -152,15 +156,19 @@ class PugIdentity {
     final decoded =
         stored == null ? null : decodeStoredJsonMap(stored, _logger);
     final current = decoded == null ? null : _tryProfileFromJson(decoded);
-    if (current != null) {
-      return current;
+    final profile =
+        current ??
+        ProfileState(
+          anonymousId: 'anon-${_ids.nextId()}',
+          externalId: _storage.getString(_keys.externalId),
+        );
+    if (profile.externalId?.startsWith(reservedDistinctIdPrefix) ?? false) {
+      return _discardReservedExternalId(profile);
     }
-    final created = ProfileState(
-      anonymousId: 'anon-${_ids.nextId()}',
-      externalId: _storage.getString(_keys.externalId),
-    );
-    _storeProfile(created);
-    return created;
+    if (current == null) {
+      _storeProfile(profile);
+    }
+    return profile;
   }
 
   void linkExternalId(ProfileState profile, String externalId) {
@@ -203,6 +211,21 @@ class PugIdentity {
     _storage.remove(_keys.profile);
     _storage.remove(_keys.deviceId);
     _storage.remove(_keys.externalId);
+  }
+
+  // A device can carry the prefix from an identify the server accepted before
+  // reserving it. As the distinct_id, it gets every batch rejected as
+  // invalid_argument, which the dispatcher drops as permanent.
+  ProfileState _discardReservedExternalId(ProfileState profile) {
+    _logger.warn(
+      'Pug stored external ID uses the reserved "$reservedDistinctIdPrefix" '
+      'prefix, discarding it. The user is treated as anonymous until '
+      'identify() is called again.',
+    );
+    final healed = ProfileState(anonymousId: profile.anonymousId);
+    _storeProfile(healed);
+    _storage.remove(_keys.externalId);
+    return healed;
   }
 
   String _rotateDeviceId() {

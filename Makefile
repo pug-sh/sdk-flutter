@@ -8,7 +8,7 @@ WELL_KNOWN_PROTO_FILES := google/protobuf/descriptor.proto
 # touch BSR (proto/ + lib/src/gen are committed). To bump: `make proto-latest` for the newest
 # commit, set PROTO_COMMIT below, then `make sync-protos && make protos` and review the diff.
 PROTO_MODULE := buf.build/pugsh/pug
-PROTO_COMMIT := 739d784162d649a3be748db76d3fafd8
+PROTO_COMMIT := 8b5d0680b10c4693b4d9d15d3dbfc663
 
 .PHONY: protos sync-protos typed-track check-codegen verify-version format analyze test check ci proto-latest
 
@@ -33,7 +33,7 @@ proto-latest:
 
 protos:
 	@command -v protoc >/dev/null || (echo "protoc is required" && exit 1)
-	@test -x "$(PROTOC_GEN_DART)" || (echo "protoc-gen-dart not found at $(PROTOC_GEN_DART). Run: dart pub global activate protoc_plugin" && exit 1)
+	@test -x "$(PROTOC_GEN_DART)" || (echo "protoc-gen-dart not found at $(PROTOC_GEN_DART). Run: dart pub global activate protoc_plugin 25.0.0" && exit 1)
 	mkdir -p $(PROTO_OUT)
 	PATH="$$(dirname "$(PROTOC_GEN_DART)"):$$PATH" protoc --proto_path=proto --dart_out=$(PROTO_OUT) $(WELL_KNOWN_PROTO_FILES) $(PROTO_FILES)
 	find $(PROTO_OUT) \( -name '*.pbjson.dart' -o -name '*.pbserver.dart' \) -delete

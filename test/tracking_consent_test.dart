@@ -67,6 +67,23 @@ void main() {
       },
     );
 
+    test('denied still rejects a reserved external id', () async {
+      final transport = FakeTransport();
+      final client = buildClient(
+        transport: transport,
+        consent: const TrackingConsentConfig(
+          defaultConsent: TrackingConsent.denied,
+        ),
+      );
+      addTearDown(client.destroy);
+
+      await expectLater(
+        client.identify('cookieless-abc'),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(transport.identifies, isEmpty);
+    });
+
     test('granted lets identify reach transport', () async {
       final transport = FakeTransport();
       final client = buildClient(transport: transport);
