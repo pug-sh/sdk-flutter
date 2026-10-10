@@ -1,3 +1,24 @@
+## Unreleased
+
+* Regenerate the protobuf code for the backend's cookieless contract. This alone
+  changes nothing on the wire: the SDK never sets the new `Event.cookieless`
+  flag and ignores the new `BatchCreateResponse` fields.
+* `Pug.identify()` now rejects an external ID that starts with `cookieless-`,
+  which the server reserves for its own cookieless identities. As with other
+  invalid input, the call is logged and completes without sending.
+* Discard a stored external ID that starts with `cookieless-`, left by an
+  identify the server accepted before reserving the prefix, and drop queued
+  events that carry it. Either would get event batches from the device
+  rejected and dropped whole. The user is treated as anonymous until the next
+  `identify()`.
+* Errors the `Pug` facade catches (identify, reset, rotate, flush, destroy, and
+  opting in or out) are now logged through the configured `PugLogger` instead
+  of `debugPrint`.
+* Log a SharedPreferences write that reports `false`, which is how Android
+  reports a failed commit, not only one that throws.
+* Stop quoting a corrupt stored value in the debug log, where a corrupt profile
+  could expose an external ID.
+
 ## 0.0.5
 
 * **Breaking:** remove campaign capture, push device registration, and device

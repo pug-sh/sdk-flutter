@@ -66,7 +66,9 @@ Map<String, Object?>? decodeStoredJsonMap(String raw, PugLogger logger) {
     return typed;
   } catch (error, stackTrace) {
     logger.warn('Pug stored JSON could not be decoded.');
-    logger.debug(error.toString());
+    // FormatException.toString() quotes the source, which can hold an
+    // external ID.
+    logger.debug(error is FormatException ? error.message : error.toString());
     logger.debug(stackTrace.toString());
     return null;
   }

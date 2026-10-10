@@ -334,6 +334,8 @@ await Pug.identify(
 
 The first identify call includes the anonymous ID so the backend can merge anonymous activity into the identified profile. Later identify calls update traits without resending the anonymous ID.
 
+External IDs must not start with `cookieless-`, which the server reserves for its own cookieless identities. `identify()` logs and ignores such an ID without sending it.
+
 ## Reset And Sessions
 
 The SDK stores a project-scoped device ID separately from session state. That
@@ -424,7 +426,7 @@ await Pug.init(
 Install the Dart protobuf plugin:
 
 ```sh
-dart pub global activate protoc_plugin
+dart pub global activate protoc_plugin 25.0.0
 ```
 
 Generate protobuf classes:

@@ -261,6 +261,13 @@ class PugClient with WidgetsBindingObserver {
     if (externalId.trim().isEmpty) {
       throw ArgumentError('externalId is required');
     }
+    if (externalId.startsWith(reservedDistinctIdPrefix)) {
+      throw ArgumentError(
+        'externalId must not start with the reserved '
+        '"$reservedDistinctIdPrefix" prefix, which the server uses for '
+        'cookieless identities',
+      );
+    }
     if (!_consent.isGranted) {
       _options.logger.debug(
         'Pug identify() dropped because tracking consent is denied.',

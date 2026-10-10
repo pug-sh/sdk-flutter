@@ -99,6 +99,31 @@ void main() {
   );
 
   test(
+    'public Pug.identify logs a reserved external id without sending it',
+    () async {
+      final logger = CapturingLogger();
+      final transport = FakeTransport();
+      await Pug.init(
+        'project',
+        PugOptions(
+          apiKey: 'key',
+          logger: logger,
+          transport: transport,
+          storage: MemoryPugStorage(),
+          autoTrack: false,
+        ),
+      );
+
+      await Pug.identify('cookieless-abc');
+
+      expect(transport.identifies, isEmpty);
+      expect(logger.errors, contains('Pug identify failed.'));
+
+      await Pug.destroy();
+    },
+  );
+
+  test(
     'internal PugClient.identify still throws on invalid input and transport failure',
     () async {
       final failedTransport =
@@ -393,6 +418,24 @@ void main() {
     expect(logger.warnings.any((m) => m.contains('remove')), isTrue);
     // The underlying error is observed, not swallowed.
     expect(logger.debugs, isNotEmpty);
+  });
+
+  test('shared preferences storage logs a write that reports false', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final logger = CapturingLogger();
+    final storage = SharedPreferencesPugStorage.withSeams(
+      preferences,
+      logger: logger,
+      writeString: (_, _) async => false,
+      removeKey: (_) async => false,
+    );
+
+    storage.setString('k', 'v');
+    storage.remove('k');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(logger.warnings, hasLength(2));
   });
 }
 

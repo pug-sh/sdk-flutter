@@ -74,6 +74,12 @@ class IdentifyRequest extends $pb.GeneratedMessage {
   static IdentifyRequest? _defaultInstance;
 
   /// Stable user identifier (e.g. email, database ID).
+  /// The 'cookieless-' prefix is server-owned: ingest mints those ids and the
+  /// reserved-prefix rule on BatchCreateRequest.distinct_id already refuses them
+  /// from clients. external_id needs the same guard because post-identify events
+  /// are keyed by external_id, so an id accepted here comes back as a distinct_id
+  /// that the batch rule then rejects — and because that rule is `all()`, one such
+  /// user fails the WHOLE batch, taking unrelated users' events with it.
   @$pb.TagNumber(1)
   $core.String get externalId => $_getSZ(0);
   @$pb.TagNumber(1)
@@ -220,6 +226,9 @@ class ProfileIdentifyMessage extends $pb.GeneratedMessage {
       $pb.GeneratedMessage.$_defaultFor<ProfileIdentifyMessage>(create);
   static ProfileIdentifyMessage? _defaultInstance;
 
+  /// Mirrors IdentifyRequest.external_id: the worker re-validates this envelope,
+  /// so the reserved prefix is enforced at both stages rather than trusting that
+  /// the value only ever arrives from an already-validated request.
   @$pb.TagNumber(1)
   $core.String get externalId => $_getSZ(0);
   @$pb.TagNumber(1)
