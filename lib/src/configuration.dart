@@ -1,3 +1,5 @@
+import 'package:http/http.dart' as http;
+
 import 'auto_properties.dart';
 import 'contracts.dart';
 import 'tracking_consent.dart';
@@ -16,6 +18,7 @@ class PugOptions {
     this.logger = const NoopPugLogger(),
     this.storage,
     this.transport,
+    this.httpClient,
     this.autoPropertyProvider,
   });
 
@@ -37,6 +40,17 @@ class PugOptions {
   final PugLogger logger;
   final PugStorage? storage;
   final PugTransport? transport;
+
+  /// The client the default transport sends through. When null it uses
+  /// `package:http`'s default `Client()`, which is `dart:io`'s `HttpClient` on
+  /// native platforms and the browser's on web.
+  ///
+  /// Pass a client such as `CupertinoClient` (`cupertino_http`) or
+  /// `CronetClient` (`cronet_http`) to send through the platform's networking
+  /// stack, or one the app already configures. The app owns it: the SDK never
+  /// closes it, including in `Pug.destroy()`, so the same client can be passed
+  /// to a later `init()`. Ignored when [transport] is set.
+  final http.Client? httpClient;
   final PugAutoPropertyProvider? autoPropertyProvider;
 
   PugOptions copyWith({
@@ -52,6 +66,7 @@ class PugOptions {
     PugLogger? logger,
     PugStorage? storage,
     PugTransport? transport,
+    http.Client? httpClient,
     PugAutoPropertyProvider? autoPropertyProvider,
   }) {
     return PugOptions(
@@ -67,6 +82,7 @@ class PugOptions {
       logger: logger ?? this.logger,
       storage: storage ?? this.storage,
       transport: transport ?? this.transport,
+      httpClient: httpClient ?? this.httpClient,
       autoPropertyProvider: autoPropertyProvider ?? this.autoPropertyProvider,
     );
   }
