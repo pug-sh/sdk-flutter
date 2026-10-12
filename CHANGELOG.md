@@ -1,4 +1,4 @@
-## Unreleased
+## 0.0.7
 
 * Add `PugOptions.httpClient` to send the SDK's requests through any
   `package:http` client. They otherwise go through `dart:io`'s `HttpClient` on
