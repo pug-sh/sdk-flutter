@@ -8,6 +8,8 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'contracts.dart';
+import 'user_agent_data.dart'
+    if (dart.library.js_interop) 'user_agent_data_web.dart';
 
 abstract interface class PugAutoPropertyProvider {
   Map<String, Object?> properties();
@@ -85,6 +87,16 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     }
 
     try {
+      // Empty off the web. On web, the browser's $os/$osVersion, read the way
+      // sdk-browser reads them.
+      properties.addAll(await userAgentDataProperties(logger: logger));
+    } catch (error) {
+      logger?.warn(
+        'Pug could not read browser client hints for auto properties: $error',
+      );
+    }
+
+    try {
       final results =
           await (connectivity ?? Connectivity()).checkConnectivity();
       properties[r'$networkType'] = _networkType(results);
@@ -101,19 +113,19 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
 
   @override
   Map<String, Object?> properties() {
-    final type = deviceType(
-      isWeb: kIsWeb,
-      operatingSystem: Platform.operatingSystem,
-    );
+    // dart:io's Platform throws on web, so it is only read off the web. There,
+    // $os/$osVersion come from the browser via _staticProperties, if at all.
+    final operatingSystem = kIsWeb ? '' : Platform.operatingSystem;
+    final type = deviceType(isWeb: kIsWeb, operatingSystem: operatingSystem);
     return {
       r'$platform': platformName(
         isWeb: kIsWeb,
-        operatingSystem: Platform.operatingSystem,
+        operatingSystem: operatingSystem,
       ),
-      r'$os': Platform.operatingSystem,
-      // Fallback for desktop/web/failure; overridden below by the preloaded
+      if (!kIsWeb) r'$os': operatingSystem,
+      // Fallback for desktop/failure; overridden below by the preloaded
       // device-info value ($osVersion in _staticProperties) when available.
-      r'$osVersion': Platform.operatingSystemVersion,
+      if (!kIsWeb) r'$osVersion': Platform.operatingSystemVersion,
       r'$locale': PlatformDispatcher.instance.locale.toLanguageTag(),
       // Fallback abbreviation (e.g. "CEST", locale-dependent); overridden by
       // the preloaded IANA identifier ($timezone in _staticProperties) when

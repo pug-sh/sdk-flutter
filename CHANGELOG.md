@@ -7,6 +7,15 @@
   app owns the client: the SDK never closes it, so the same one can be reused
   across `Pug.destroy()` and `Pug.init()`. It is ignored, with a warning, when a
   custom `transport` is also set.
+* Fix Flutter web, where no events were sent. Building each event read
+  `Platform.operatingSystem`, which throws on web, so every `track()` call and
+  every automatic event failed, and the default logger discarded the error.
+* On web, `$os` and `$osVersion` now come from the browser's user-agent client
+  hints, read the way `@pug-sh/browser` reads them. They are omitted in browsers
+  without client hints (Safari, Firefox).
+* Fix the UUIDv7 IDs generated on web. Compiled to JavaScript, their timestamp
+  lost its top 16 bits, so event, session, device, and anonymous IDs did not
+  sort by time.
 
 ## 0.0.6
 

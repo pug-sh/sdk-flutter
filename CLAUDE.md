@@ -17,6 +17,7 @@ make protos       # Generate Dart protobuf files from proto/**/*.proto
 dart format lib test
 flutter analyze
 flutter test
+flutter test --platform chrome test/web   # browser-only tests; the VM run skips them
 make check        # protos + format + analyze + test
 ```
 
@@ -138,7 +139,9 @@ Permanent HTTP failures drop events; transient failures roll back and retry late
 
 Auto properties include `$projectId`, `$sdkVersion`, `$platform`, `$deviceType`, `$os`, `$osVersion`, `$locale`, `$timezone` (the IANA identifier via `flutter_timezone`, preloaded in `create(...)`; falls back to the platform abbreviation when unavailable), screen dimensions, app version/build/package where available, device manufacturer/model where available, and a coarse connectivity category (`$networkType`: `wifi`, `mobile`, `ethernet`, `vpn`, `bluetooth`, `other`, `none`, or `unknown`) where available. `$deviceName` is deliberately not sent — user-assigned device names are PII.
 
-`$platform` is a cross-SDK contract, not a Flutter detail: the backend promotes it into a dedicated `platform` column verbatim, with no normalization or validation on the ingest path, so casing that diverges from the rest of the family splits a cross-SDK breakdown into per-SDK buckets. `SystemPugAutoPropertyProvider.platformName` returns `web` when `kIsWeb`, else `Platform.operatingSystem` lowercased — so `$platform` and `$os` are one value from one source, as they are elsewhere in the family.
+`$platform` is a cross-SDK contract, not a Flutter detail: the backend promotes it into a dedicated `platform` column verbatim, with no normalization or validation on the ingest path, so casing that diverges from the rest of the family splits a cross-SDK breakdown into per-SDK buckets. `SystemPugAutoPropertyProvider.platformName` returns `web` when `kIsWeb`, else `Platform.operatingSystem` lowercased — so on native targets `$platform` and `$os` are one value from one source, as they are elsewhere in the family. Web is the exception (see below).
+
+On web, `properties()` must not read `dart:io`'s `Platform`: it throws `UnsupportedError` there, and since `_createEvent` calls `properties()` for every event, every `track()` failed. `$os`/`$osVersion` instead come from the browser's User-Agent Client Hints, read the way `@pug-sh/browser` reads them (`../sdk-browser/src/parsers.ts`). `$os` is `navigator.userAgentData.platform` and `$osVersion` the high-entropy `platformVersion`. The version is best-effort, and a request that takes longer than 1 s leaves it out. `create()` preloads both into `_staticProperties` through `user_agent_data_web.dart`; a conditional import (`if (dart.library.js_interop)`) swaps that in for the empty `user_agent_data.dart` stub, so native builds never see `dart:js_interop`. Browsers without the API (Safari, Firefox) omit both, as `@pug-sh/browser` does. The values are that SDK's raw strings (`macOS`, `Windows`), not the lowercase `Platform.operatingSystem` names native builds send.
 
 Do **not** derive `$platform` from `defaultTargetPlatform`. That is a UI-theming signal: `.name` reproduces the enum's casing (`iOS`, `macOS`), on web it resolves to the *browser's host* OS, and it *throws* `FlutterError` on any target outside its six-member enum — raised inside `properties()`, which `_createEvent` calls unguarded, that would breach the never-throw invariant. `kIsWeb` must still be checked first (the same ordering `navigation.dart` uses to choose `page_view` over `screen_view`).
 
@@ -214,6 +217,7 @@ Notification payload sanitization keeps only flat strings, booleans, finite numb
 - Keep generated protobuf code generated; update `.proto` files and run `make protos`.
 - Do not log API keys, push tokens, or full request payloads by default.
 - Prefer small injectable interfaces over hard-coded platform dependencies.
+- Code that runs on web must not read `dart:io`'s `Platform` without a `kIsWeb` check (it throws there), nor shift or mask ints wider than 32 bits: compiled to JavaScript, the bitwise operators work on 32-bit values. `UuidV7Generator` builds its 48-bit timestamp with `%` and `~/` for that reason. Neither bug reproduces on the VM, where `kIsWeb` is a compile-time `false` and ints are 64 bits. So `test/web/` holds `@TestOn('browser')` tests, which CI's "Web tests (Chrome)" job runs with `flutter test --platform chrome test/web`. Stub plugin-backed sources in those tests: a browser test registers no plugins, and an unanswered platform-channel call on web never completes.
 
 ## Current Feature Parity With `../sdk-web`
 
