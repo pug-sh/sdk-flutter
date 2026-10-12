@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:pug_flutter/pug_flutter.dart';
 import 'package:pug_flutter/src/connect_transport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -328,6 +330,105 @@ void main() {
   });
 
   test(
+    'Pug.init sends events and identify through the host httpClient',
+    () async {
+      final requests = <http.Request>[];
+      final httpClient = MockClient((request) async {
+        requests.add(request);
+        return http.Response('', 200);
+      });
+
+      await Pug.init(
+        'project',
+        PugOptions(
+          apiKey: 'key',
+          httpClient: httpClient,
+          storage: MemoryPugStorage(),
+          autoPropertyProvider: const PugStaticAutoPropertyProvider({}),
+          autoTrack: false,
+        ),
+      );
+      Pug.track('one');
+      await Pug.flush();
+      await Pug.identify('user-1');
+      await Pug.destroy();
+
+      expect(requests.map((request) => request.url.toString()), [
+        'https://api.pugs.dev/sdk.events.v1.EventsService/BatchCreate',
+        'https://api.pugs.dev/sdk.profiles.v1.ProfilesSDKService/Identify',
+      ]);
+      expect(
+        requests.map((request) => request.headers['x-api-key']),
+        everyElement('key'),
+      );
+    },
+  );
+
+  test('destroy leaves the host httpClient open for the next init', () async {
+    final paths = <String>[];
+    final httpClient = ClosableMockClient((request) async {
+      paths.add(request.url.path);
+      return http.Response('', 200);
+    });
+    PugOptions options() => PugOptions(
+      apiKey: 'key',
+      httpClient: httpClient,
+      storage: MemoryPugStorage(),
+      autoPropertyProvider: const PugStaticAutoPropertyProvider({}),
+      autoTrack: false,
+    );
+
+    await Pug.init('project', options());
+    Pug.track('before');
+    await Pug.flush();
+    await Pug.destroy();
+    await Pug.init('project', options());
+    Pug.track('after');
+    await Pug.flush();
+    await Pug.destroy();
+
+    // Had the first destroy closed it, the second batch would fail as "Client
+    // is already closed", which the retry policy treats as transient, so it
+    // would never arrive.
+    expect(paths, [
+      '/sdk.events.v1.EventsService/BatchCreate',
+      '/sdk.events.v1.EventsService/BatchCreate',
+    ]);
+  });
+
+  test(
+    'a custom transport takes precedence over httpClient, with a warning',
+    () async {
+      final logger = CapturingLogger();
+      final transport = FakeTransport();
+      final requests = <http.Request>[];
+      final client = PugClient(
+        projectId: 'project',
+        options: PugOptions(
+          apiKey: 'key',
+          transport: transport,
+          httpClient: MockClient((request) async {
+            requests.add(request);
+            return http.Response('', 200);
+          }),
+          logger: logger,
+          storage: MemoryPugStorage(),
+          autoPropertyProvider: const PugStaticAutoPropertyProvider({}),
+          autoTrack: false,
+        ),
+      );
+      await client.start();
+      client.track('one');
+      await client.flush();
+      await client.destroy();
+
+      expect(transport.batches.single.map((event) => event.kind), ['one']);
+      expect(requests, isEmpty);
+      expect(logger.warnings, contains(contains('httpClient')));
+    },
+  );
+
+  test(
     'a flush in flight when destroy runs cannot resurrect the queue',
     () async {
       final storage = MemoryPugStorage();
@@ -449,5 +550,28 @@ class CloseSpyTransport extends ConnectPugTransport {
   void close() {
     closed = true;
     super.close();
+  }
+}
+
+/// A [MockClient] that, like the platform clients, rejects every request once
+/// it has been closed.
+class ClosableMockClient extends http.BaseClient {
+  ClosableMockClient(MockClientHandler handler) : _inner = MockClient(handler);
+
+  final MockClient _inner;
+  bool _closed = false;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (_closed) {
+      throw http.ClientException('Client is already closed.', request.url);
+    }
+    return _inner.send(request);
+  }
+
+  @override
+  void close() {
+    _closed = true;
+    _inner.close();
   }
 }

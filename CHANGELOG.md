@@ -1,5 +1,12 @@
 ## Unreleased
 
+* Add `PugOptions.httpClient` to send the SDK's requests through any
+  `package:http` client. They otherwise go through `dart:io`'s `HttpClient` on
+  Android, iOS, and desktop. Pass `CupertinoClient` (`cupertino_http`),
+  `CronetClient` (`cronet_http`), or a client the app already configures. The
+  app owns the client: the SDK never closes it, so the same one can be reused
+  across `Pug.destroy()` and `Pug.init()`. It is ignored, with a warning, when a
+  custom `transport` is also set.
 * Fix Flutter web, where no events were sent. Building each event read
   `Platform.operatingSystem`, which throws on web, so every `track()` call and
   every automatic event failed, and the default logger discarded the error.
