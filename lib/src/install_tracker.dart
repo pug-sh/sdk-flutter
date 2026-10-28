@@ -24,12 +24,14 @@ class InstallTracker {
     required PugStorage storage,
     required PugLogger logger,
     required Map<String, Object?> Function() autoProperties,
+    required String? installSource,
     required bool Function(String kind, Map<String, Object?> props) capture,
   }) : _enabled = enabled,
        _keys = keys,
        _storage = storage,
        _logger = logger,
        _autoProperties = autoProperties,
+       _installSource = installSource,
        _capture = capture;
 
   final bool _enabled;
@@ -37,6 +39,7 @@ class InstallTracker {
   final PugStorage _storage;
   final PugLogger _logger;
   final Map<String, Object?> Function() _autoProperties;
+  final String? _installSource;
   final bool Function(String kind, Map<String, Object?> props) _capture;
 
   /// Must run before anything else in `start()` writes a project-scoped key,
@@ -62,7 +65,11 @@ class InstallTracker {
           _storage.setString(_keys.lastVersion, version);
           return;
         }
-        if (_capture('app_install', {'appVersion': version})) {
+        if (_capture('app_install', {
+          'appVersion': version,
+          if (_installSource != null && _installSource.isNotEmpty)
+            'installSource': _installSource,
+        })) {
           _storage.setString(_keys.lastVersion, version);
         }
         return;

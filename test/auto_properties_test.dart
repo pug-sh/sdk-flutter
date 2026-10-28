@@ -26,6 +26,42 @@ void main() {
     expect(props[r'$appVersion'], '1.2.3');
   });
 
+  test('create keeps the installer store off the auto-properties', () async {
+    final provider = await SystemPugAutoPropertyProvider.create(
+      packageInfo:
+          () async => PackageInfo(
+            appName: 'app',
+            packageName: 'dev.pugs.app',
+            version: '1.2.3',
+            buildNumber: '42',
+            installerStore: 'com.android.vending',
+          ),
+      localTimezone: () async => 'Asia/Kolkata',
+    );
+
+    expect(provider.installSource, 'com.android.vending');
+    expect(
+      provider.properties().values,
+      isNot(contains('com.android.vending')),
+    );
+  });
+
+  test('create drops the com.android.shell an adb install reports', () async {
+    final provider = await SystemPugAutoPropertyProvider.create(
+      packageInfo:
+          () async => PackageInfo(
+            appName: 'app',
+            packageName: 'dev.pugs.app',
+            version: '1.2.3',
+            buildNumber: '42',
+            installerStore: 'com.android.shell',
+          ),
+      localTimezone: () async => 'Asia/Kolkata',
+    );
+
+    expect(provider.installSource, isNull);
+  });
+
   test(
     'timezone preload failure falls back to the platform abbreviation',
     () async {

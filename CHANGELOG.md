@@ -1,3 +1,12 @@
+## Unreleased
+
+* `app_install` now carries `installSource`, as `package_info_plus` reports it:
+  on Android the package name of the app that started the install, such as
+  `com.android.vending` for Google Play, and on iOS `com.apple`,
+  `com.apple.testflight` or `com.apple.simulator`, inferred from the App Store
+  receipt path. It is left out when there is none, as with an `adb install`, on
+  web and desktop, and with a custom `PugAutoPropertyProvider`.
+
 ## 0.0.7
 
 * Add `PugOptions.httpClient` to send the SDK's requests through any
@@ -60,7 +69,7 @@
 * Add automatic `app_install` and `app_update` tracking, controlled by the new
   `PugOptions.autoInstallEvents` (default on, independent of `autoTrack`).
   `app_install` is emitted on the first launch the SDK sees on a device, and
-  `app_update` — carrying `previousVersion` — on the first launch after the app
+  `app_update` (carrying `previousVersion`) on the first launch after the app
   version changes. Detection compares the `$appVersion` auto-property against a
   version persisted under `__pug_<projectId>_last_version__`, so it is inactive
   when a custom `PugAutoPropertyProvider` supplies no app version. The install
@@ -101,7 +110,7 @@
   The backend promotes `$platform` into a dedicated column verbatim, so the
   mismatch split one platform into per-SDK buckets in any cross-SDK breakdown.
 * Fix `$platform` on Flutter web, which reported the *browser's host* OS rather
-  than `web` — a web app on an iPhone was indistinguishable from native iOS
+  than `web`: a web app on an iPhone was indistinguishable from native iOS
   traffic. `$platform` is now always `web` there, and equals `$os` on every
   native target.
 * Document the auto-properties attached to every event in the README.

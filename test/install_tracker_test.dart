@@ -18,8 +18,54 @@ void main() {
 
       final events = client.queue.peekUnlocked();
       expect(events.map((event) => event.kind), ['app_install']);
+      expect(events.single.customProperties.keys, ['appVersion']);
       expect(events.single.customProperties['appVersion']?.value, '1.0.0');
       expect(storage.getString(_lastVersionKey), '1.0.0');
+    });
+
+    test('app_install carries the install source', () {
+      final client = launch(
+        storage: MemoryPugStorage(),
+        appVersion: '1.0.0',
+        installSource: 'com.android.vending',
+      );
+
+      final events = client.queue.peekUnlocked();
+      expect(events.map((event) => event.kind), ['app_install']);
+      expect(
+        events.single.customProperties['installSource']?.value,
+        'com.android.vending',
+      );
+    });
+
+    test('an empty install source is left out', () {
+      final client = launch(
+        storage: MemoryPugStorage(),
+        appVersion: '1.0.0',
+        installSource: '',
+      );
+
+      final events = client.queue.peekUnlocked();
+      expect(events.map((event) => event.kind), ['app_install']);
+      expect(events.single.customProperties, isNot(contains('installSource')));
+    });
+
+    test('app_update carries no install source', () async {
+      final storage = MemoryPugStorage();
+      await launch(
+        storage: storage,
+        appVersion: '1.0.0',
+        installSource: 'com.android.vending',
+      ).flush();
+      final updated = launch(
+        storage: storage,
+        appVersion: '1.1.0',
+        installSource: 'com.android.vending',
+      );
+
+      final events = updated.queue.peekUnlocked();
+      expect(events.map((event) => event.kind), ['app_update']);
+      expect(events.single.customProperties, isNot(contains('installSource')));
     });
 
     test('a relaunch on the same version emits nothing', () async {
@@ -125,7 +171,7 @@ void main() {
         consent: config,
       );
       // Opting in writes the consent key, and that key deliberately outlives
-      // destroy() — so it must not read as prior tracking activity.
+      // destroy(), so it must not read as prior tracking activity.
       denied.optInTracking();
 
       final granted = launch(
@@ -273,12 +319,16 @@ void main() {
 PugClient launch({
   required MemoryPugStorage storage,
   Object? appVersion,
+  String? installSource,
   bool autoTrack = true,
   bool autoInstallEvents = true,
   TrackingConsentConfig consent = const TrackingConsentConfig(),
   PugLogger? logger,
   WidgetsBinding? lifecycleBinding,
 }) {
+  final properties = <String, Object?>{
+    if (appVersion != null) r'$appVersion': appVersion,
+  };
   final client = PugClient(
     projectId: 'project',
     options: PugOptions(
@@ -286,9 +336,13 @@ PugClient launch({
       transport: FakeTransport(),
       storage: storage,
       logger: logger ?? const NoopPugLogger(),
-      autoPropertyProvider: PugStaticAutoPropertyProvider({
-        if (appVersion != null) r'$appVersion': appVersion,
-      }),
+      autoPropertyProvider:
+          installSource == null
+              ? PugStaticAutoPropertyProvider(properties)
+              : SystemPugAutoPropertyProvider(
+                staticProperties: properties,
+                installSource: installSource,
+              ),
       trackingConsent: consent,
       autoTrack: autoTrack,
       autoPageViews: false,
