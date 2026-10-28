@@ -1,4 +1,4 @@
-## Unreleased
+## 0.0.8
 
 * `app_install` now carries `installSource`, as `package_info_plus` reports it:
   on Android the package name of the app that started the install, such as
