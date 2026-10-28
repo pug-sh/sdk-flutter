@@ -1,0 +1,48 @@
+name: OSV-Scanner
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Daily, for advisories published against dependencies that have not changed.
+  schedule:
+    - cron: "14 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Third-party actions are pinned to commits, since their tags can be moved.
+jobs:
+  # pubspec.lock is not committed, so the scan reads the one `flutter pub get` resolves now, as a new
+  # app would get it.
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+      - run: flutter pub get
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pubspec-lock
+          path: pubspec.lock
+          retention-days: 1
+
+  # The pull request variant of the reusable workflow cannot take a generated lockfile, so pull
+  # requests get this full scan too and fail on any known vulnerability, not only new ones. Findings
+  # reach the Security tab from pushes and the daily run only, since a pull request from a fork
+  # cannot write security events.
+  scan:
+    needs: lock
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+    with:
+      download-artifact: pubspec-lock
+      upload-sarif: ${{ github.event_name != 'pull_request' }}
