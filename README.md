@@ -75,11 +75,11 @@ await Pug.init(
 
 `Pug.init(...)` uses shared-preferences-backed storage and fuller auto-properties such as app version/build, device model, screen size, and network type by default. To opt out of persistence, provide `storage: MemoryPugStorage()` or another custom `PugStorage`.
 
-Public SDK calls are best-effort and do not throw. `Pug.track()`, `Pug.identify()`, `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` catch and log runtime failures. `Pug.init()` is the one exception: it throws synchronously on invalid input (empty `projectId`/`apiKey`) so a misconfiguration surfaces at the call site, but setup failures during startup are logged and swallowed. `Pug.identify()` never throws — invalid input and transport failures are logged and the future completes normally. Repeated init calls and `identify()` calls before init are ignored with a warning.
+Public SDK calls are best-effort and do not throw. `Pug.track()`, `Pug.identify()`, `Pug.reset()`, `Pug.rotate()`, `Pug.flush()`, and `Pug.destroy()` catch and log runtime failures. `Pug.init()` is the one exception: it throws synchronously on invalid input (empty `projectId`/`apiKey`) so a misconfiguration surfaces at the call site, but setup failures during startup are logged and swallowed. `Pug.identify()` never throws: invalid input and transport failures are logged and the future completes normally. Repeated init calls and `identify()` calls before init are ignored with a warning.
 
 When `autoTrack` is enabled, the SDK tracks `app_open` when the app is already
 resumed at init or later enters foreground. It tracks `app_close` when the app is
-backgrounded — `hidden`, `paused`, or `detached`. A transient `inactive` state is
+backgrounded (`hidden`, `paused`, or `detached`). A transient `inactive` state is
 not a close: the app is still visible during an incoming call, a control-centre
 swipe, or the app switcher.
 
@@ -94,6 +94,13 @@ install event is suppressed when other Pug state is already on the device, so
 adding this SDK to an app that already used Pug does not report its existing
 users as new installs; `Pug.destroy()` clears that state, so a destroy/re-init
 cycle does look like a fresh install.
+
+`app_install` carries `installSource`, as `package_info_plus` reports it: on
+Android the package name of the app that started the install, such as
+`com.android.vending` for Google Play, and on iOS `com.apple`,
+`com.apple.testflight` or `com.apple.simulator`, inferred from the App Store
+receipt path. It is left out when there is none, as with an `adb install`, on
+web and desktop, and with a custom `PugAutoPropertyProvider`.
 
 When `autoPageViews` is enabled (default), the SDK tracks a navigation event when
 the user navigates between routes: `screen_view` (with a `screenName` property) on
@@ -113,7 +120,7 @@ MaterialApp(
 )
 ```
 
-After a route change, every event carries `$url` (the current route) and `$referrer` (the previous route) as auto-properties — matching the web SDK — so route context is not limited to navigation events. Route state updates whenever the observer reports a change, even if `autoPageViews` is disabled.
+After a route change, every event carries `$url` (the current route) and `$referrer` (the previous route) as auto-properties (matching the web SDK), so route context is not limited to navigation events. Route state updates whenever the observer reports a change, even if `autoPageViews` is disabled.
 
 Campaign capture from app links and deep links is implemented in the SDK but is
 not available yet: the backend does not accept campaign data, so nothing is
@@ -129,7 +136,7 @@ with `$` to keep them distinct from your properties:
 | --- | --- |
 | `$projectId` | The project ID passed to `Pug.init(...)`. |
 | `$sdkVersion` | This package's version. |
-| `$platform` | `web` on Flutter web, otherwise the lowercase operating system reported by the target — `android`, `ios`, `macos`, `linux`, `windows`, and `fuchsia` today, with any other value passed through as-is. |
+| `$platform` | `web` on Flutter web, otherwise the lowercase operating system reported by the target: `android`, `ios`, `macos`, `linux`, `windows`, and `fuchsia` today, with any other value passed through as-is. |
 | `$deviceType` | `tv`, `mobile`, or `desktop`. Omitted on web, where the host device is not detectable. Android TV reports `$platform: android` with `$deviceType: tv`. |
 | `$os` | The operating system. Equals `$platform` on native targets. On web it is the browser's `navigator.userAgentData.platform`, such as `macOS` or `Windows`, as `@pug-sh/browser` reports it, and is omitted in browsers without user-agent client hints (Safari, Firefox). |
 | `$osVersion` | The operating system version. On web, the `platformVersion` client hint where the browser provides it. |
@@ -146,7 +153,7 @@ detail: the values are lowercase so that a breakdown by platform reconciles
 across every SDK sending to the same project. On Flutter web it is always `web`,
 never the browser's host OS.
 
-`$deviceName` is deliberately never sent — user-assigned device names are PII.
+`$deviceName` is deliberately never sent: user-assigned device names are PII.
 
 Auto-properties come from a `PugAutoPropertyProvider`. `Pug.init(...)` installs
 `SystemPugAutoPropertyProvider`, which preloads app, device, timezone, and
@@ -191,8 +198,8 @@ await Pug.init(
 Flip consent at runtime:
 
 ```dart
-Pug.optInTracking(); // grant — events flow
-Pug.optOutTracking(); // deny — events are dropped
+Pug.optInTracking(); // grant: events flow
+Pug.optOutTracking(); // deny: events are dropped
 
 Pug.isTrackingEnabled(); // → bool (consent only; independent of dryRun)
 Pug.getTrackingConsent(); // → TrackingConsent.granted | TrackingConsent.denied
@@ -208,7 +215,7 @@ silent.
 
 ## Track Events
 
-Use the typed methods for well-known events — required fields, value types,
+Use the typed methods for well-known events. Required fields, value types,
 and method names are all compile-time checked:
 
 ```dart
@@ -299,7 +306,7 @@ The untyped `Pug.track(PugEventNames.*)` path continues to work but emits a
 debug-level hint recommending the typed alternative:
 
 ```dart
-// Still works — emits a debug-level hint via PugLogger.debug.
+// Still works, but emits a debug-level hint via PugLogger.debug.
 // The default DebugPrintPugLogger drops it in release builds.
 Pug.track(
   PugEventNames.purchase,
@@ -375,8 +382,8 @@ in the SDK but are not available yet: the devices endpoint is not live, so
 be turned on in a later release.
 
 The notification event kinds themselves are live and reachable through the typed
-API — `Pug.track.notificationClicked(...)`, `notificationReceived`, and
-`notificationDismissed` — if your app already receives notifications through its
+API (`Pug.track.notificationClicked(...)`, `notificationReceived`, and
+`notificationDismissed`) if your app already receives notifications through its
 own push integration. Send them with `immediate: true`: notification callbacks
 often fire while the app is backgrounded, and a queued event is lost when the OS
 suspends the process before the next flush.
