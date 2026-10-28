@@ -35,9 +35,14 @@ const _televisionFeatures = {
   'android.hardware.type.television',
 };
 
+/// What `package_info_plus` reports for an adb install from Android 14 on: the
+/// shell that started it, since an adb install records no installer.
+const _adbInstallSource = 'com.android.shell';
+
 class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
   SystemPugAutoPropertyProvider({
     Map<String, Object?> staticProperties = const {},
+    this.installSource,
   }) : _staticProperties = Map<String, Object?>.unmodifiable(staticProperties);
 
   static Future<SystemPugAutoPropertyProvider> create({
@@ -48,6 +53,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     PugLogger? logger,
   }) async {
     final properties = <String, Object?>{};
+    String? installSource;
 
     try {
       final info = await (packageInfo ?? PackageInfo.fromPlatform)();
@@ -55,6 +61,9 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       properties[r'$appPackage'] = info.packageName;
       properties[r'$appVersion'] = info.version;
       properties[r'$appBuild'] = info.buildNumber;
+      if (info.installerStore != _adbInstallSource) {
+        installSource = info.installerStore;
+      }
     } catch (error) {
       logger?.warn(
         'Pug could not read package info for auto properties: $error',
@@ -106,10 +115,16 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
       );
     }
 
-    return SystemPugAutoPropertyProvider(staticProperties: properties);
+    return SystemPugAutoPropertyProvider(
+      staticProperties: properties,
+      installSource: installSource,
+    );
   }
 
   final Map<String, Object?> _staticProperties;
+
+  /// Only `app_install` carries it, so it is kept out of [properties].
+  final String? installSource;
 
   @override
   Map<String, Object?> properties() {
@@ -139,7 +154,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
   }
 
   /// The cross-SDK `$platform` value, which the backend promotes into a column
-  /// verbatim — so it has to match what the rest of the family sends.
+  /// verbatim, so it has to match what the rest of the family sends.
   ///
   /// Deliberately not [defaultTargetPlatform]: that keeps the enum's casing,
   /// reports the browser's host OS on web, and throws outside its six members.
@@ -154,7 +169,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     return operatingSystem.toLowerCase();
   }
 
-  /// `tv` never comes from here — Android TV reports `android`, so only
+  /// `tv` never comes from here: Android TV reports `android`, so only
   /// [androidProperties] can identify it. Null on web and unknown targets, so
   /// `$deviceType` is omitted rather than guessed into the wrong bucket.
   @visibleForTesting
@@ -269,7 +284,7 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
     };
   }
 
-  /// The marketing name when the plugin resolved one, else the raw identifier —
+  /// The marketing name when the plugin resolved one, else the raw identifier:
   /// "iPhone" from `UIDevice.model`, "MacBookPro18,3" from sysctl.
   static String _appleModel(Map<String, dynamic> data) {
     final modelName = data['modelName']?.toString() ?? '';

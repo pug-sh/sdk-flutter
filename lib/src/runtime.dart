@@ -103,6 +103,10 @@ class PugClient with WidgetsBindingObserver {
       storage: _storage,
       logger: _options.logger,
       autoProperties: _autoPropertyProvider.properties,
+      installSource:
+          _autoPropertyProvider is SystemPugAutoPropertyProvider
+              ? _autoPropertyProvider.installSource
+              : null,
       capture: (kind, props) {
         if (_disposed || !_consent.isGranted) {
           return false;
