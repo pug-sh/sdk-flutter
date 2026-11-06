@@ -4,9 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
-  # Daily, for advisories published against dependencies that have not changed.
+  # Hourly, for advisories published against dependencies that have not changed.
   schedule:
-    - cron: "14 3 * * *"
+    - cron: "14 * * * *"
   workflow_dispatch:
 
 permissions:
