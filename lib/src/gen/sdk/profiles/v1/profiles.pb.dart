@@ -73,13 +73,13 @@ class IdentifyRequest extends $pb.GeneratedMessage {
       $pb.GeneratedMessage.$_defaultFor<IdentifyRequest>(create);
   static IdentifyRequest? _defaultInstance;
 
-  /// Stable user identifier (e.g. email, database ID).
+  /// Stable, unique user identifier: your database user ID, not an email, which
+  /// can change.
   /// The 'cookieless-' prefix is server-owned: ingest mints those ids and the
-  /// reserved-prefix rule on BatchCreateRequest.distinct_id already refuses them
+  /// reserved-prefix rule on an incoming event's distinct_id already refuses them
   /// from clients. external_id needs the same guard because post-identify events
   /// are keyed by external_id, so an id accepted here comes back as a distinct_id
-  /// that the batch rule then rejects — and because that rule is `all()`, one such
-  /// user fails the WHOLE batch, taking unrelated users' events with it.
+  /// and BatchCreate drops every event of that user.
   @$pb.TagNumber(1)
   $core.String get externalId => $_getSZ(0);
   @$pb.TagNumber(1)
@@ -89,8 +89,9 @@ class IdentifyRequest extends $pb.GeneratedMessage {
   @$pb.TagNumber(1)
   void clearExternalId() => $_clearField(1);
 
-  /// Profile properties — shallow-merged into existing properties. On key conflict,
-  /// these values take precedence over previously stored values.
+  /// Profile properties, shallow-merged into existing properties. On key conflict,
+  /// these values take precedence over previously stored values. A trait whose key,
+  /// or any string in it, holds a NUL can't be stored and is dropped.
   @$pb.TagNumber(2)
   $0.Struct get traits => $_getN(1);
   @$pb.TagNumber(2)
@@ -114,7 +115,7 @@ class IdentifyRequest extends $pb.GeneratedMessage {
   void clearAnonymousId() => $_clearField(3);
 
   /// The device to assign to this profile. The SDK should send this on first
-  /// identify and on account switch (external_id changed) — not on every call,
+  /// identify and on account switch (external_id changed), not on every call,
   /// to avoid unnecessary DB writes. Omit for web SDKs without push support.
   @$pb.TagNumber(4)
   $core.String get deviceId => $_getSZ(3);
@@ -163,6 +164,189 @@ class IdentifyResponse extends $pb.GeneratedMessage {
   static IdentifyResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<IdentifyResponse>(create);
   static IdentifyResponse? _defaultInstance;
+}
+
+class BatchIdentifyRequest extends $pb.GeneratedMessage {
+  factory BatchIdentifyRequest({
+    $core.Iterable<IdentifyRequest>? identifies,
+  }) {
+    final result = create();
+    if (identifies != null) result.identifies.addAll(identifies);
+    return result;
+  }
+
+  BatchIdentifyRequest._();
+
+  factory BatchIdentifyRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory BatchIdentifyRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'BatchIdentifyRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'sdk.profiles.v1'),
+      createEmptyInstance: create)
+    ..pPM<IdentifyRequest>(1, _omitFieldNames ? '' : 'identifies',
+        subBuilder: IdentifyRequest.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BatchIdentifyRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BatchIdentifyRequest copyWith(void Function(BatchIdentifyRequest) updates) =>
+      super.copyWith((message) => updates(message as BatchIdentifyRequest))
+          as BatchIdentifyRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static BatchIdentifyRequest create() => BatchIdentifyRequest._();
+  @$core.override
+  BatchIdentifyRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static BatchIdentifyRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<BatchIdentifyRequest>(create);
+  static BatchIdentifyRequest? _defaultInstance;
+
+  /// BatchIdentify validates each item on its own with IdentifyRequest's rules,
+  /// so an invalid item is skipped and the rest are queued.
+  @$pb.TagNumber(1)
+  $pb.PbList<IdentifyRequest> get identifies => $_getList(0);
+}
+
+class BatchIdentifyResponse extends $pb.GeneratedMessage {
+  factory BatchIdentifyResponse({
+    $core.int? accepted,
+    $core.Iterable<InvalidIdentify>? invalidIdentifies,
+  }) {
+    final result = create();
+    if (accepted != null) result.accepted = accepted;
+    if (invalidIdentifies != null)
+      result.invalidIdentifies.addAll(invalidIdentifies);
+    return result;
+  }
+
+  BatchIdentifyResponse._();
+
+  factory BatchIdentifyResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory BatchIdentifyResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'BatchIdentifyResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'sdk.profiles.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'accepted', fieldType: $pb.PbFieldType.OU3)
+    ..pPM<InvalidIdentify>(2, _omitFieldNames ? '' : 'invalidIdentifies',
+        subBuilder: InvalidIdentify.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BatchIdentifyResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BatchIdentifyResponse copyWith(
+          void Function(BatchIdentifyResponse) updates) =>
+      super.copyWith((message) => updates(message as BatchIdentifyResponse))
+          as BatchIdentifyResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static BatchIdentifyResponse create() => BatchIdentifyResponse._();
+  @$core.override
+  BatchIdentifyResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static BatchIdentifyResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<BatchIdentifyResponse>(create);
+  static BatchIdentifyResponse? _defaultInstance;
+
+  /// Identifies queued for the worker, not yet applied.
+  @$pb.TagNumber(1)
+  $core.int get accepted => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set accepted($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccepted() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccepted() => $_clearField(1);
+
+  /// The items skipped for breaking a validation rule, in request order.
+  @$pb.TagNumber(2)
+  $pb.PbList<InvalidIdentify> get invalidIdentifies => $_getList(1);
+}
+
+class InvalidIdentify extends $pb.GeneratedMessage {
+  factory InvalidIdentify({
+    $core.int? index,
+    $core.Iterable<$core.String>? violations,
+  }) {
+    final result = create();
+    if (index != null) result.index = index;
+    if (violations != null) result.violations.addAll(violations);
+    return result;
+  }
+
+  InvalidIdentify._();
+
+  factory InvalidIdentify.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory InvalidIdentify.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'InvalidIdentify',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'sdk.profiles.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'index', fieldType: $pb.PbFieldType.OU3)
+    ..pPS(2, _omitFieldNames ? '' : 'violations')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  InvalidIdentify clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  InvalidIdentify copyWith(void Function(InvalidIdentify) updates) =>
+      super.copyWith((message) => updates(message as InvalidIdentify))
+          as InvalidIdentify;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static InvalidIdentify create() => InvalidIdentify._();
+  @$core.override
+  InvalidIdentify createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static InvalidIdentify getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<InvalidIdentify>(create);
+  static InvalidIdentify? _defaultInstance;
+
+  /// Position in BatchIdentifyRequest.identifies, counting from 0.
+  @$pb.TagNumber(1)
+  $core.int get index => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set index($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasIndex() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearIndex() => $_clearField(1);
+
+  /// The rules it broke, e.g. "external_id: external_id must not start with the
+  /// reserved 'cookieless-' prefix". At most 10, then one more entry that counts
+  /// the rest, e.g. "and 3 more".
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get violations => $_getList(1);
 }
 
 /// ProfileIdentifyMessage is the internal NATS envelope for the identify worker.
@@ -227,8 +411,8 @@ class ProfileIdentifyMessage extends $pb.GeneratedMessage {
   static ProfileIdentifyMessage? _defaultInstance;
 
   /// Mirrors IdentifyRequest.external_id: the worker re-validates this envelope,
-  /// so the reserved prefix is enforced at both stages rather than trusting that
-  /// the value only ever arrives from an already-validated request.
+  /// so its rules hold at both stages rather than trusting that the value only
+  /// ever arrives from an already-validated request.
   @$pb.TagNumber(1)
   $core.String get externalId => $_getSZ(0);
   @$pb.TagNumber(1)
@@ -289,6 +473,17 @@ class ProfilesSDKServiceApi {
           $pb.ClientContext? ctx, IdentifyRequest request) =>
       _client.invoke<IdentifyResponse>(
           ctx, 'ProfilesSDKService', 'Identify', request, IdentifyResponse());
+
+  /// BatchIdentify publishes many identifies in one request for the identify
+  /// worker. Items for one external_id that only set traits may merge in order,
+  /// later values winning. It is not atomic: an error can follow a partial publish,
+  /// and a retry repeats what was already published. The worker applies separate
+  /// messages in no guaranteed order. An item that breaks a validation rule is
+  /// skipped and listed in invalid_identifies; the rest are still queued.
+  $async.Future<BatchIdentifyResponse> batchIdentify(
+          $pb.ClientContext? ctx, BatchIdentifyRequest request) =>
+      _client.invoke<BatchIdentifyResponse>(ctx, 'ProfilesSDKService',
+          'BatchIdentify', request, BatchIdentifyResponse());
 }
 
 const $core.bool _omitFieldNames =

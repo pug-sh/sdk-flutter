@@ -24,6 +24,9 @@ import 'state_storage.dart';
 import 'tracking_consent.dart';
 import 'version.dart';
 
+// Event.kind's rule in proto/sdk/events/v1/events.proto.
+final RegExp _eventKindPattern = RegExp(r'^[a-zA-Z0-9_.-]+$');
+
 class PugClient with WidgetsBindingObserver {
   PugClient({
     required this.projectId,
@@ -54,6 +57,7 @@ class PugClient with WidgetsBindingObserver {
           endpoint: _options.endpoint,
           apiKey: _options.apiKey,
           httpClient: _options.httpClient,
+          logger: _options.logger,
         );
     _dispatcher = EventDispatcher(
       queue: PugEventQueue(
@@ -238,7 +242,7 @@ class PugClient with WidgetsBindingObserver {
     TrackOptions options = const TrackOptions(),
   }) {
     try {
-      if (_disposed || kind.trim().isEmpty) {
+      if (_disposed || !_acceptsKind(kind)) {
         return;
       }
       if (!_consent.isGranted) {
@@ -259,6 +263,19 @@ class PugClient with WidgetsBindingObserver {
     } catch (error, stackTrace) {
       _options.logger.error('Pug track failed.', error, stackTrace);
     }
+  }
+
+  bool _acceptsKind(String kind) {
+    if (_eventKindPattern.hasMatch(kind)) {
+      return true;
+    }
+    _options.logger.warn(
+      kind.trim().isEmpty
+          ? 'Pug dropped an event with a blank kind.'
+          : 'Pug dropped event "$kind": a kind may only contain letters, '
+              'digits, "_", "." and "-".',
+    );
+    return false;
   }
 
   Future<void> identify(
@@ -453,7 +470,7 @@ class PugClient with WidgetsBindingObserver {
     }
     final currentRoute = _navigation.url;
     final previousRoute = _navigation.referrer;
-    final autoProperties = mapper.mapProperties({
+    final autoProperties = mapper.mapAutoProperties({
       r'$projectId': projectId,
       r'$sdkVersion': pugSdkVersion,
       if (currentRoute != null) r'$url': currentRoute,

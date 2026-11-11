@@ -119,4 +119,106 @@ void main() {
     final value = mapped['long']!.value as String;
     expect(value.length, 1024);
   });
+
+  test('an event with an invalid kind is dropped and logged; the batch is '
+      'sent', () async {
+    final logger = CapturingLogger();
+    final transport = FakeTransport();
+    final client = testClient(transport: transport, logger: logger);
+
+    client.track('signup');
+    client.track('Order Completed');
+    client.track('signup:started');
+    client.track('purchase.v2-final_1');
+    await client.flush();
+
+    expect(transport.batches.single.map((event) => event.kind), [
+      'signup',
+      'purchase.v2-final_1',
+    ]);
+    expect(logger.warnings, [
+      'Pug dropped event "Order Completed": a kind may only contain letters, '
+          'digits, "_", "." and "-".',
+      'Pug dropped event "signup:started": a kind may only contain letters, '
+          'digits, "_", "." and "-".',
+    ]);
+  });
+
+  test('a blank kind is dropped and logged', () {
+    final logger = CapturingLogger();
+    final client = testClient(logger: logger);
+
+    client.track('');
+    client.track('  ');
+
+    expect(client.queue.peekUnlocked(), isEmpty);
+    expect(logger.warnings, [
+      'Pug dropped an event with a blank kind.',
+      'Pug dropped an event with a blank kind.',
+    ]);
+  });
+
+  test(r'a $-prefixed property is dropped and logged; its event is kept', () {
+    final logger = CapturingLogger();
+    final client = testClient(logger: logger);
+
+    client.track(
+      'purchase',
+      props: {r'$plan': 'pro', 'plan': 'pro', r'$unset': null},
+    );
+
+    final event = client.queue.peekUnlocked().single;
+    expect(event.customProperties.keys, ['plan']);
+    expect(logger.warnings, [
+      r'Pug dropped property "$plan" on event "purchase": keys starting with '
+          r'"$" are reserved for auto-properties.',
+    ]);
+  });
+
+  test(r'an auto-property without the $ prefix is dropped and logged', () {
+    final logger = CapturingLogger();
+    final client = testClient(
+      logger: logger,
+      autoPropertyProvider: const PugStaticAutoPropertyProvider({
+        r'$appVersion': '1.2.3',
+        'appVersion': '1.2.3',
+      }),
+    );
+
+    client.track('signup');
+
+    final auto = client.queue.peekUnlocked().single.autoProperties;
+    expect(auto[r'$appVersion']?.value, '1.2.3');
+    expect(auto.containsKey('appVersion'), isFalse);
+    expect(logger.warnings, [
+      r'Pug dropped auto-property "appVersion": auto-property keys must start '
+          r'with "$".',
+    ]);
+  });
+
+  test('durations are sent as seconds, rounded to the millisecond', () {
+    final mapped = const PropertyMapper().mapProperties({
+      'zero': Duration.zero,
+      'whole': const Duration(hours: 1),
+      'half': const Duration(seconds: 90, milliseconds: 500),
+      'millis': const Duration(milliseconds: 1234),
+      'leadingZeros': const Duration(milliseconds: 5),
+      'roundsUp': const Duration(microseconds: 1500),
+      'roundsDown': const Duration(microseconds: 1499),
+      'negative': const Duration(milliseconds: -1500),
+      'negativeToZero': const Duration(microseconds: -400),
+    });
+
+    expect(mapped.map((key, value) => MapEntry(key, value.toJson())), {
+      'zero': {'stringValue': '0s'},
+      'whole': {'stringValue': '3600s'},
+      'half': {'stringValue': '90.5s'},
+      'millis': {'stringValue': '1.234s'},
+      'leadingZeros': {'stringValue': '0.005s'},
+      'roundsUp': {'stringValue': '0.002s'},
+      'roundsDown': {'stringValue': '0.001s'},
+      'negative': {'stringValue': '-1.5s'},
+      'negativeToZero': {'stringValue': '0s'},
+    });
+  });
 }

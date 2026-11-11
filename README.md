@@ -243,7 +243,10 @@ it in any build mode.
 
 ### Custom Events
 
-Custom events can use any event name and any supported property values:
+Custom events can use any event name made of letters, digits, `_`, `.` and `-`,
+and any supported property values. An event with another name, such as
+`Order Completed`, is dropped with a warning, and so is a property whose key
+starts with `$`, which is reserved for auto-properties:
 
 ```dart
 Pug.track('checkout_step_viewed');
@@ -324,6 +327,7 @@ Property values supported by the SDK:
 - `bool`
 - finite `int` and `double`
 - `DateTime`
+- `Duration`, sent as seconds rounded to the millisecond, such as `"90.5s"`
 - maps and lists that can be JSON encoded
 
 Unsupported or non-finite values are dropped.

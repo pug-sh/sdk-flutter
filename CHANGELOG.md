@@ -1,3 +1,34 @@
+## Unreleased
+
+* Drop, with a warning, an event whose kind the server rejects: a kind may only
+  contain letters, digits, `_`, `.` and `-`, so `Order Completed` or
+  `signup:started` is dropped. Drop, with a warning, a property whose key starts
+  with `$`, which is reserved for auto-properties, and send its event without
+  it; and drop an auto-property from a custom `PugAutoPropertyProvider` whose
+  key does not start with `$`. The server drops an event that breaks one of
+  these rules, and before pug v0.0.55 it failed the whole batch, losing every
+  event sent with the bad one.
+* Warn when the server accepts only part of a batch, with the count for each
+  reason and, for each invalid event, its kind and the rules it broke. Those
+  events used to be lost with no log.
+* Retry a batch whose 200 response isn't protobuf, such as a captive portal's
+  sign-in page, as the Android and iOS SDKs do. It used to be committed as
+  delivered, losing its events. An `identify` answered that way now fails with
+  a log instead of counting as done, so the next `identify` still merges the
+  anonymous profile.
+* The typed `Pug.track.*` methods take a `Duration` for the media and chat
+  durations: `position` on `videoPlay`, `videoPause`, `audioPlay` and
+  `audioPause`, `fromPosition` and `toPosition` on `videoSeeked` and
+  `audioSeeked`, `duration` on `chatCallLeft` and `muteDuration` on
+  `chatMemberMuted`. A `Duration` in `props` or `extras` is sent too. Each is
+  sent as seconds, such as `"90.5s"`, rounded to the millisecond, as the Android
+  and iOS SDKs send it; it used to be dropped with a warning.
+  `WellKnownPropertyType` has a new `duration` value, so an exhaustive `switch`
+  over it needs a case for it.
+* On Linux, `$deviceManufacturer` and `$deviceModel` are no longer sent. They
+  held the distribution's name from os-release, such as `Ubuntu 24.04.1 LTS`,
+  rather than the hardware's.
+
 ## 0.0.8
 
 * `app_install` now carries `installSource`, as `package_info_plus` reports it:

@@ -344,6 +344,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void audioPause({
     required String audioId,
+    Duration? position,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
   }) {
@@ -352,7 +353,10 @@ class TrackNamespace {
       eventName,
       props: _merge(
         methodName: 'audioPause',
-        explicit: <String, Object?>{'audioId': audioId},
+        explicit: <String, Object?>{
+          'audioId': audioId,
+          if (position != null) 'position': position,
+        },
         extras: extras,
       ),
       options: options,
@@ -366,6 +370,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void audioPlay({
     required String audioId,
+    Duration? position,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
   }) {
@@ -374,7 +379,10 @@ class TrackNamespace {
       eventName,
       props: _merge(
         methodName: 'audioPlay',
-        explicit: <String, Object?>{'audioId': audioId},
+        explicit: <String, Object?>{
+          'audioId': audioId,
+          if (position != null) 'position': position,
+        },
         extras: extras,
       ),
       options: options,
@@ -388,6 +396,8 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void audioSeeked({
     required String audioId,
+    Duration? fromPosition,
+    Duration? toPosition,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
   }) {
@@ -396,7 +406,11 @@ class TrackNamespace {
       eventName,
       props: _merge(
         methodName: 'audioSeeked',
-        explicit: <String, Object?>{'audioId': audioId},
+        explicit: <String, Object?>{
+          'audioId': audioId,
+          if (fromPosition != null) 'fromPosition': fromPosition,
+          if (toPosition != null) 'toPosition': toPosition,
+        },
         extras: extras,
       ),
       options: options,
@@ -586,6 +600,7 @@ class TrackNamespace {
     required String conversationId,
     required String callId,
     String? callType,
+    Duration? duration,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
   }) {
@@ -598,6 +613,7 @@ class TrackNamespace {
           'conversationId': conversationId,
           'callId': callId,
           if (callType != null) 'callType': callType,
+          if (duration != null) 'duration': duration,
         },
         extras: extras,
       ),
@@ -831,6 +847,7 @@ class TrackNamespace {
   void chatMemberMuted({
     required String conversationId,
     required String memberId,
+    Duration? muteDuration,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
   }) {
@@ -842,6 +859,7 @@ class TrackNamespace {
         explicit: <String, Object?>{
           'conversationId': conversationId,
           'memberId': memberId,
+          if (muteDuration != null) 'muteDuration': muteDuration,
         },
         extras: extras,
       ),
@@ -3159,6 +3177,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void videoPause({
     required String videoId,
+    Duration? position,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
   }) {
@@ -3167,7 +3186,10 @@ class TrackNamespace {
       eventName,
       props: _merge(
         methodName: 'videoPause',
-        explicit: <String, Object?>{'videoId': videoId},
+        explicit: <String, Object?>{
+          'videoId': videoId,
+          if (position != null) 'position': position,
+        },
         extras: extras,
       ),
       options: options,
@@ -3181,6 +3203,7 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void videoPlay({
     required String videoId,
+    Duration? position,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
   }) {
@@ -3189,7 +3212,10 @@ class TrackNamespace {
       eventName,
       props: _merge(
         methodName: 'videoPlay',
-        explicit: <String, Object?>{'videoId': videoId},
+        explicit: <String, Object?>{
+          'videoId': videoId,
+          if (position != null) 'position': position,
+        },
         extras: extras,
       ),
       options: options,
@@ -3203,6 +3229,8 @@ class TrackNamespace {
   /// at WARN level (the named arg always wins).
   void videoSeeked({
     required String videoId,
+    Duration? fromPosition,
+    Duration? toPosition,
     Map<String, Object?> extras = const {},
     TrackOptions options = const TrackOptions(),
   }) {
@@ -3211,7 +3239,11 @@ class TrackNamespace {
       eventName,
       props: _merge(
         methodName: 'videoSeeked',
-        explicit: <String, Object?>{'videoId': videoId},
+        explicit: <String, Object?>{
+          'videoId': videoId,
+          if (fromPosition != null) 'fromPosition': fromPosition,
+          if (toPosition != null) 'toPosition': toPosition,
+        },
         extras: extras,
       ),
       options: options,

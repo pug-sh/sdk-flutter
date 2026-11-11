@@ -205,12 +205,10 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
         return appleProperties((await plugin.iosInfo).data);
       case 'macos':
         return macosProperties((await plugin.macOsInfo).data);
+      // device_info_plus's Linux info is os-release, which names the distro,
+      // not the hardware.
       case 'linux':
-        final linux = await plugin.linuxInfo;
-        return {
-          r'$deviceManufacturer': _readString(linux, 'prettyName'),
-          r'$deviceModel': _readString(linux, 'name'),
-        };
+        return const {};
       case 'windows':
         return windowsProperties((await plugin.windowsInfo).data);
       default:
@@ -296,10 +294,6 @@ class SystemPugAutoPropertyProvider implements PugAutoPropertyProvider {
 
   static Future<String> _systemTimezone() async =>
       (await FlutterTimezone.getLocalTimezone()).identifier;
-
-  static String _readString(BaseDeviceInfo info, String name) {
-    return info.data[name]?.toString() ?? '';
-  }
 
   static String _networkType(Object results) {
     final values =

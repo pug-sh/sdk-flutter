@@ -8,7 +8,7 @@ WELL_KNOWN_PROTO_FILES := google/protobuf/descriptor.proto
 # touch BSR (proto/ + lib/src/gen are committed). To bump: `make proto-latest` for the newest
 # commit, set PROTO_COMMIT below, then `make sync-protos && make protos` and review the diff.
 PROTO_MODULE := buf.build/pugsh/pug
-PROTO_COMMIT := 8b5d0680b10c4693b4d9d15d3dbfc663
+PROTO_COMMIT := 4f07eb37ba8443a398ec5f1f6403827e
 
 .PHONY: protos sync-protos typed-track check-codegen verify-version format analyze test check ci proto-latest
 

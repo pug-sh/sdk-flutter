@@ -64,6 +64,8 @@ Object _sampleValue(WellKnownPropertyType type) {
       return 1.0;
     case WellKnownPropertyType.bool:
       return true;
+    case WellKnownPropertyType.duration:
+      return const Duration(milliseconds: 1500);
   }
 }
 
@@ -561,6 +563,37 @@ void main() {
       final typed = _stripVolatile(typedReqs);
       final untyped = _stripVolatile(untypedReqs);
       expect(jsonEncode(typed), equals(jsonEncode(untyped)));
+    });
+
+    test('Pug.track.videoSeeked sends its positions in seconds', () async {
+      final typedReqs = await _captureRequests(() {
+        Pug.track.videoSeeked(
+          videoId: 'v-1',
+          fromPosition: const Duration(seconds: 90, milliseconds: 500),
+          toPosition: const Duration(minutes: 2),
+        );
+      });
+      final untypedReqs = await _captureRequests(() {
+        Pug.track(
+          'video_seeked',
+          props: {
+            'videoId': 'v-1',
+            'fromPosition': '90.5s',
+            'toPosition': '120s',
+          },
+        );
+      });
+
+      expect(typedReqs, hasLength(1));
+      expect(typedReqs.single['customProperties'], {
+        'videoId': {'stringValue': 'v-1'},
+        'fromPosition': {'stringValue': '90.5s'},
+        'toPosition': {'stringValue': '120s'},
+      });
+      expect(
+        jsonEncode(_stripVolatile(typedReqs)),
+        equals(jsonEncode(_stripVolatile(untypedReqs))),
+      );
     });
 
     test('Pug.track.signup ≈ Pug.track("signup", ...)', () async {

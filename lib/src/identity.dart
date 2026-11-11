@@ -214,7 +214,8 @@ class PugIdentity {
   }
 
   // A device can carry the prefix from an identify the server accepted before
-  // reserving it. As the distinct_id, it gets every batch rejected as
+  // reserving it. As the distinct_id, it gets every event dropped as
+  // invalid_event, and on a server before pug v0.0.55 every batch rejected as
   // invalid_argument, which the dispatcher drops as permanent.
   ProfileState _discardReservedExternalId(ProfileState profile) {
     _logger.warn(
