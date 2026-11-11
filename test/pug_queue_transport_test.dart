@@ -569,6 +569,42 @@ void main() {
     },
   );
 
+  test('connect transport fails identify and subscribe on a body that is not '
+      'their empty response', () async {
+    ConnectPugTransport answering(http.Response response) =>
+        ConnectPugTransport(
+          endpoint: 'http://example.com',
+          apiKey: 'key',
+          httpClient: MockClient((_) async => response),
+        );
+    final page = http.Response('<html>Sign in to the Wi-Fi</html>', 200);
+    const request = IdentifyRequest(
+      projectId: 'project',
+      externalId: 'user-1',
+      traits: {},
+    );
+    final transient = isA<PugTransportException>()
+        .having((error) => error.code, 'code', 'unavailable')
+        .having((error) => error.isPermanent, 'isPermanent', isFalse);
+
+    await expectLater(answering(page).identify(request), throwsA(transient));
+    await expectLater(
+      answering(page).subscribeDevice(
+        const PushSubscription(
+          provider: 'fake',
+          platform: 'android',
+          token: 'token-1',
+          deviceId: 'device-1',
+        ),
+      ),
+      throwsA(transient),
+    );
+    await expectLater(
+      answering(http.Response('', 200)).identify(request),
+      completes,
+    );
+  });
+
   test('connect transport maps a transient error response for retry', () async {
     final httpClient = MockClient(
       (request) async => http.Response(

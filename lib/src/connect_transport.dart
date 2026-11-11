@@ -6,7 +6,9 @@ import 'package:protobuf/protobuf.dart';
 import 'contracts.dart';
 import 'errors.dart';
 import 'events.dart';
+import 'gen/sdk/devices/v1/devices.pb.dart' as devicespb;
 import 'gen/sdk/events/v1/events.pb.dart' as eventspb;
+import 'gen/sdk/profiles/v1/profiles.pb.dart' as profilespb;
 import 'proto_codec.dart';
 import 'push_models.dart';
 
@@ -61,10 +63,10 @@ class ConnectException implements Exception {
 /// Only unary RPCs are used, so this is a deliberately small Connect client
 /// rather than a full implementation. A 200 to `BatchCreate` can still drop
 /// some of the batch's events, so its body is decoded and a shortfall logged
-/// as a warning; the other procedures answer 200 with nothing to read. A 200
-/// that isn't protobuf, and every non-200 response, is mapped to a
-/// [PugTransportException] whose `permanent` flag decides whether the batch is
-/// dropped or retried.
+/// as a warning; the other procedures answer an empty message, and a body that
+/// isn't one fails the call. A 200 that isn't protobuf, and every non-200
+/// response, is mapped to a [PugTransportException] whose `permanent` flag
+/// decides whether the batch is dropped or retried.
 class ConnectPugTransport implements PugTransport, PugDeviceTransport {
   ConnectPugTransport({
     required this.endpoint,
@@ -105,12 +107,22 @@ class ConnectPugTransport implements PugTransport, PugDeviceTransport {
   }
 
   @override
-  Future<void> identify(IdentifyRequest request) =>
-      _unary(_identifyProcedure, codec.toIdentifyRequest(request));
+  Future<void> identify(IdentifyRequest request) async {
+    final response = await _unary(
+      _identifyProcedure,
+      codec.toIdentifyRequest(request),
+    );
+    _decodeOrFail(response, profilespb.IdentifyResponse.fromBuffer);
+  }
 
   @override
-  Future<void> subscribeDevice(PushSubscription subscription) =>
-      _unary(_subscribeProcedure, codec.toSubscribeRequest(subscription));
+  Future<void> subscribeDevice(PushSubscription subscription) async {
+    final response = await _unary(
+      _subscribeProcedure,
+      codec.toSubscribeRequest(subscription),
+    );
+    _decodeOrFail(response, devicespb.SubscribeResponse.fromBuffer);
+  }
 
   /// Closes the underlying [http.Client], but only if this transport created it
   /// (no client was injected). A no-op for an injected client, whose lifecycle
@@ -167,6 +179,26 @@ class ConnectPugTransport implements PugTransport, PugDeviceTransport {
     }
     if (report.accepted < events.length) {
       logger.warn(_partialAcceptanceMessage(report, events));
+    }
+  }
+
+  /// Identify and Subscribe answer an empty message, so a body that doesn't
+  /// decode as one isn't the server's answer: fail the call, as sdk-web does,
+  /// rather than report it done.
+  void _decodeOrFail(
+    http.Response response,
+    GeneratedMessage Function(List<int> bytes) fromBuffer,
+  ) {
+    try {
+      fromBuffer(response.bodyBytes);
+    } catch (error, stackTrace) {
+      throw mapConnectError(
+        ConnectException(
+          'unavailable',
+          'could not decode the response: $error',
+        ),
+        stackTrace,
+      );
     }
   }
 

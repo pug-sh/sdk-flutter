@@ -13,9 +13,9 @@
   events used to be lost with no log.
 * Retry a batch whose 200 response isn't protobuf, such as a captive portal's
   sign-in page, as the Android and iOS SDKs do. It used to be committed as
-  delivered, losing its events. An `identify` answered that way now fails with
-  a log instead of counting as done, so the next `identify` still merges the
-  anonymous profile.
+  delivered, losing its events. An `identify` answered that way, or with a body
+  that isn't its response, now fails with a log instead of counting as done, so
+  the next `identify` still merges the anonymous profile.
 * The typed `Pug.track.*` methods take a `Duration` for the media and chat
   durations: `position` on `videoPlay`, `videoPause`, `audioPlay` and
   `audioPause`, `fromPosition` and `toPosition` on `videoSeeked` and
