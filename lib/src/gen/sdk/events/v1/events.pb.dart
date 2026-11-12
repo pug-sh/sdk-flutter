@@ -65,6 +65,9 @@ class BatchCreateRequest extends $pb.GeneratedMessage {
       $pb.GeneratedMessage.$_defaultFor<BatchCreateRequest>(create);
   static BatchCreateRequest? _defaultInstance;
 
+  /// BatchCreate validates each event on its own, as an IncomingEvent, so an
+  /// event that breaks a rule, or repeats an earlier kept event's event_id, is
+  /// dropped as invalid_event and the rest are kept.
   @$pb.TagNumber(1)
   $pb.PbList<Event> get events => $_getList(0);
 }
@@ -74,12 +77,14 @@ class BatchCreateResponse extends $pb.GeneratedMessage {
     $core.int? accepted,
     $core.int? dropped,
     $core.Iterable<$core.MapEntry<$core.String, $core.int>>? droppedByReason,
+    $core.Iterable<InvalidEvent>? invalidEvents,
   }) {
     final result = create();
     if (accepted != null) result.accepted = accepted;
     if (dropped != null) result.dropped = dropped;
     if (droppedByReason != null)
       result.droppedByReason.addEntries(droppedByReason);
+    if (invalidEvents != null) result.invalidEvents.addAll(invalidEvents);
     return result;
   }
 
@@ -103,6 +108,8 @@ class BatchCreateResponse extends $pb.GeneratedMessage {
         keyFieldType: $pb.PbFieldType.OS,
         valueFieldType: $pb.PbFieldType.OU3,
         packageName: const $pb.PackageName('sdk.events.v1'))
+    ..pPM<InvalidEvent>(4, _omitFieldNames ? '' : 'invalidEvents',
+        subBuilder: InvalidEvent.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -150,9 +157,138 @@ class BatchCreateResponse extends $pb.GeneratedMessage {
   /// Per-reason breakdown of `dropped`, keyed by a stable reason token. This is
   /// what makes a drop actionable rather than merely visible: `salt_unavailable`
   /// is a server-side fault and the same payload may be retried, whereas
-  /// `day_out_of_range` is client clock skew that will drop again on every retry.
+  /// `day_out_of_range` is client clock skew and `invalid_event` an event that
+  /// broke a validation rule or repeated an earlier kept event's event_id, and
+  /// both drop again on every retry.
   @$pb.TagNumber(3)
   $pb.PbMap<$core.String, $core.int> get droppedByReason => $_getMap(2);
+
+  /// The events dropped as `invalid_event`, in request order.
+  @$pb.TagNumber(4)
+  $pb.PbList<InvalidEvent> get invalidEvents => $_getList(3);
+}
+
+class InvalidEvent extends $pb.GeneratedMessage {
+  factory InvalidEvent({
+    $core.int? index,
+    $core.Iterable<$core.String>? violations,
+  }) {
+    final result = create();
+    if (index != null) result.index = index;
+    if (violations != null) result.violations.addAll(violations);
+    return result;
+  }
+
+  InvalidEvent._();
+
+  factory InvalidEvent.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory InvalidEvent.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'InvalidEvent',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'sdk.events.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'index', fieldType: $pb.PbFieldType.OU3)
+    ..pPS(2, _omitFieldNames ? '' : 'violations')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  InvalidEvent clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  InvalidEvent copyWith(void Function(InvalidEvent) updates) =>
+      super.copyWith((message) => updates(message as InvalidEvent))
+          as InvalidEvent;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static InvalidEvent create() => InvalidEvent._();
+  @$core.override
+  InvalidEvent createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static InvalidEvent getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<InvalidEvent>(create);
+  static InvalidEvent? _defaultInstance;
+
+  /// Position in BatchCreateRequest.events, counting from 0.
+  @$pb.TagNumber(1)
+  $core.int get index => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set index($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasIndex() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearIndex() => $_clearField(1);
+
+  /// The rules it broke, e.g. "event.kind: does not match regex pattern `^[a-zA-Z0-9_.-]+$`".
+  /// At most 10, then one more entry that counts the rest, e.g. "and 3 more".
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get violations => $_getList(1);
+}
+
+/// Never sent. BatchCreate validates each event as one: Event's rules plus two
+/// that hold only at the SDK boundary, since the server fills a cookieless
+/// event's identity with 'cookieless-' ids before the EventBatch envelope
+/// re-validates it.
+class IncomingEvent extends $pb.GeneratedMessage {
+  factory IncomingEvent({
+    Event? event,
+  }) {
+    final result = create();
+    if (event != null) result.event = event;
+    return result;
+  }
+
+  IncomingEvent._();
+
+  factory IncomingEvent.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IncomingEvent.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IncomingEvent',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'sdk.events.v1'),
+      createEmptyInstance: create)
+    ..aOM<Event>(1, _omitFieldNames ? '' : 'event', subBuilder: Event.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IncomingEvent clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IncomingEvent copyWith(void Function(IncomingEvent) updates) =>
+      super.copyWith((message) => updates(message as IncomingEvent))
+          as IncomingEvent;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IncomingEvent create() => IncomingEvent._();
+  @$core.override
+  IncomingEvent createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IncomingEvent getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IncomingEvent>(create);
+  static IncomingEvent? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Event get event => $_getN(0);
+  @$pb.TagNumber(1)
+  set event(Event value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasEvent() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearEvent() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Event ensureEvent() => $_ensure(0);
 }
 
 class Event extends $pb.GeneratedMessage {
@@ -255,7 +391,7 @@ class Event extends $pb.GeneratedMessage {
 
   /// Empty only when cookieless (event.identity_required_unless_cookieless);
   /// never client-settable to a 'cookieless-'-prefixed value
-  /// (batch.distinct_id_reserved_prefix).
+  /// (incoming_event.distinct_id_reserved_prefix).
   @$pb.TagNumber(4)
   $core.String get distinctId => $_getSZ(3);
   @$pb.TagNumber(4)
@@ -286,8 +422,8 @@ class Event extends $pb.GeneratedMessage {
   @$pb.TagNumber(6)
   $0.Timestamp ensureOccurTime() => $_ensure(5);
 
-  /// A UUID whenever set; omit entirely in cookieless mode (an explicit "" is
-  /// also rejected — set fields must satisfy the uuid rule).
+  /// A UUID whenever set; omit entirely in cookieless mode (an explicit "" also
+  /// drops the event as invalid_event, since a set field must be a UUID).
   @$pb.TagNumber(7)
   $core.String get sessionId => $_getSZ(6);
   @$pb.TagNumber(7)

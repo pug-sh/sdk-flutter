@@ -94,7 +94,8 @@ class PugEventQueue {
         }
       }
       // Queued before PugIdentity discarded a reserved external ID. The server
-      // rejects any batch holding one, healthy events included.
+      // drops each one, and before pug v0.0.55 rejected any batch holding one,
+      // healthy events included.
       final restored = events.length;
       events.removeWhere(
         (event) => event.distinctId.startsWith(reservedDistinctIdPrefix),

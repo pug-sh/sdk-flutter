@@ -6,6 +6,9 @@ import 'package:protobuf/protobuf.dart';
 import 'contracts.dart';
 import 'errors.dart';
 import 'events.dart';
+import 'gen/sdk/devices/v1/devices.pb.dart' as devicespb;
+import 'gen/sdk/events/v1/events.pb.dart' as eventspb;
+import 'gen/sdk/profiles/v1/profiles.pb.dart' as profilespb;
 import 'proto_codec.dart';
 import 'push_models.dart';
 
@@ -58,9 +61,11 @@ class ConnectException implements Exception {
 /// `https://api.pugs.dev`; override it via `PugOptions.endpoint`.
 ///
 /// Only unary RPCs are used, so this is a deliberately small Connect client
-/// rather than a full implementation. Successful (HTTP 200) response bodies are
-/// acknowledgements the SDK never reads, so they are not decoded. Non-200
-/// responses are mapped to a [PugTransportException] whose `permanent` flag
+/// rather than a full implementation. A 200 to `BatchCreate` can still drop
+/// some of the batch's events, so its body is decoded and a shortfall logged
+/// as a warning; the other procedures answer an empty message, and a body that
+/// isn't one fails the call. A 200 that isn't protobuf, and every non-200
+/// response, is mapped to a [PugTransportException] whose `permanent` flag
 /// decides whether the batch is dropped or retried.
 class ConnectPugTransport implements PugTransport, PugDeviceTransport {
   ConnectPugTransport({
@@ -68,6 +73,7 @@ class ConnectPugTransport implements PugTransport, PugDeviceTransport {
     required this.apiKey,
     this.codec = const PugProtoCodec(),
     this.timeout = const Duration(seconds: 30),
+    this.logger = const NoopPugLogger(),
     http.Client? httpClient,
   }) : _httpClient = httpClient ?? http.Client(),
        _ownsClient = httpClient == null;
@@ -81,6 +87,10 @@ class ConnectPugTransport implements PugTransport, PugDeviceTransport {
   /// loop indefinitely.
   final Duration timeout;
 
+  /// Receives the warnings about a `BatchCreate` 200: events the server
+  /// dropped from the batch, or a body that would not decode.
+  final PugLogger logger;
+
   final http.Client _httpClient;
   final bool _ownsClient;
 
@@ -88,16 +98,31 @@ class ConnectPugTransport implements PugTransport, PugDeviceTransport {
   Future<void> send(Event event) => sendBatch([event]);
 
   @override
-  Future<void> sendBatch(List<Event> events) =>
-      _unary(_batchCreateProcedure, codec.toBatchCreateRequest(events));
+  Future<void> sendBatch(List<Event> events) async {
+    final response = await _unary(
+      _batchCreateProcedure,
+      codec.toBatchCreateRequest(events),
+    );
+    _warnIfPartiallyAccepted(response, events);
+  }
 
   @override
-  Future<void> identify(IdentifyRequest request) =>
-      _unary(_identifyProcedure, codec.toIdentifyRequest(request));
+  Future<void> identify(IdentifyRequest request) async {
+    final response = await _unary(
+      _identifyProcedure,
+      codec.toIdentifyRequest(request),
+    );
+    _decodeOrFail(response, profilespb.IdentifyResponse.fromBuffer);
+  }
 
   @override
-  Future<void> subscribeDevice(PushSubscription subscription) =>
-      _unary(_subscribeProcedure, codec.toSubscribeRequest(subscription));
+  Future<void> subscribeDevice(PushSubscription subscription) async {
+    final response = await _unary(
+      _subscribeProcedure,
+      codec.toSubscribeRequest(subscription),
+    );
+    _decodeOrFail(response, devicespb.SubscribeResponse.fromBuffer);
+  }
 
   /// Closes the underlying [http.Client], but only if this transport created it
   /// (no client was injected). A no-op for an injected client, whose lifecycle
@@ -108,7 +133,10 @@ class ConnectPugTransport implements PugTransport, PugDeviceTransport {
     }
   }
 
-  Future<void> _unary(String procedure, GeneratedMessage request) async {
+  Future<http.Response> _unary(
+    String procedure,
+    GeneratedMessage request,
+  ) async {
     try {
       final response = await _httpClient
           .post(
@@ -120,8 +148,57 @@ class ConnectPugTransport implements PugTransport, PugDeviceTransport {
       if (response.statusCode != 200) {
         throw _connectException(response);
       }
+      // A 200 that isn't protobuf comes from something between the app and the
+      // server, such as a captive portal: the request never arrived, so retry.
+      final contentType = response.headers['content-type'] ?? '';
+      if (contentType.isNotEmpty &&
+          !contentType.toLowerCase().contains('proto')) {
+        throw ConnectException(
+          'unavailable',
+          'expected a protobuf response but got content-type "$contentType"',
+        );
+      }
+      return response;
     } catch (error, stackTrace) {
       throw mapConnectError(error, stackTrace);
+    }
+  }
+
+  /// The dispatcher commits a batch the server answered 200, so for any event
+  /// the server dropped from it, this warning is the only trace.
+  void _warnIfPartiallyAccepted(http.Response response, List<Event> events) {
+    final eventspb.BatchCreateResponse report;
+    try {
+      report = eventspb.BatchCreateResponse.fromBuffer(response.bodyBytes);
+    } catch (error) {
+      logger.warn(
+        'Pug could not decode the BatchCreate response to check it for '
+        'dropped events: $error',
+      );
+      return;
+    }
+    if (report.accepted < events.length) {
+      logger.warn(_partialAcceptanceMessage(report, events));
+    }
+  }
+
+  /// Identify and Subscribe answer an empty message, so a body that doesn't
+  /// decode as one isn't the server's answer: fail the call, as sdk-web does,
+  /// rather than report it done.
+  void _decodeOrFail(
+    http.Response response,
+    GeneratedMessage Function(List<int> bytes) fromBuffer,
+  ) {
+    try {
+      fromBuffer(response.bodyBytes);
+    } catch (error, stackTrace) {
+      throw mapConnectError(
+        ConnectException(
+          'unavailable',
+          'could not decode the response: $error',
+        ),
+        stackTrace,
+      );
     }
   }
 
@@ -168,6 +245,42 @@ PugTransportException mapConnectError(Object error, StackTrace stackTrace) {
 /// Whether [code] (a Connect wire code) is permanent and should drop the batch.
 bool isPermanentConnectCode(String code) =>
     _permanentConnectCodes.contains(code);
+
+/// The server lists at most 10 violations per invalid event, then counts the
+/// rest; the warning caps the invalid events it names the same way.
+const int _maxInvalidEventsNamed = 10;
+
+String _partialAcceptanceMessage(
+  eventspb.BatchCreateResponse report,
+  List<Event> events,
+) {
+  final sent = events.length;
+  final message = StringBuffer(
+    'Pug sent $sent ${sent == 1 ? 'event' : 'events'} and the server '
+    'accepted ${report.accepted}',
+  );
+  final reasons =
+      report.droppedByReason.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+  if (reasons.isNotEmpty) {
+    final counts = reasons.map((reason) => '${reason.key}: ${reason.value}');
+    message.write(' (dropped: ${counts.join(', ')})');
+  }
+  message.write('.');
+  final invalid = report.invalidEvents;
+  for (final entry in invalid.take(_maxInvalidEventsNamed)) {
+    final kind = entry.index < sent ? ' ("${events[entry.index].kind}")' : '';
+    message.write(
+      ' Invalid event #${entry.index}$kind: ${entry.violations.join('; ')}.',
+    );
+  }
+  if (invalid.length > _maxInvalidEventsNamed) {
+    message.write(
+      ' And ${invalid.length - _maxInvalidEventsNamed} more invalid events.',
+    );
+  }
+  return message.toString();
+}
 
 /// Builds a [ConnectException] from a non-200 Connect response. Prefers the
 /// `code`/`message` in the JSON error body; falls back to mapping the HTTP

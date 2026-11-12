@@ -7,7 +7,7 @@ import 'package:http/testing.dart';
 import 'package:pug_flutter/pug_flutter.dart';
 import 'package:pug_flutter/src/connect_transport.dart';
 import 'package:pug_flutter/src/event_queue_storage.dart';
-
+import 'package:pug_flutter/src/gen/sdk/events/v1/events.pb.dart' as eventspb;
 import 'package:pug_flutter/src/push_models.dart';
 
 import 'test_support.dart';
@@ -368,6 +368,241 @@ void main() {
     );
 
     await expectLater(transport.send(fakeEvent('one')), completes);
+  });
+
+  group('connect transport reads the BatchCreate response', () {
+    ConnectPugTransport transportAnswering(
+      http.Response response,
+      PugLogger logger,
+    ) => ConnectPugTransport(
+      endpoint: 'https://api.pugs.dev',
+      apiKey: 'key',
+      logger: logger,
+      httpClient: MockClient((_) async => response),
+    );
+
+    http.Response report(eventspb.BatchCreateResponse response) =>
+        http.Response.bytes(
+          response.writeToBuffer(),
+          200,
+          headers: const {'content-type': 'application/proto'},
+        );
+
+    test('and warns, naming each invalid event, when it drops some', () async {
+      final logger = CapturingLogger();
+      final transport = transportAnswering(
+        report(
+          eventspb.BatchCreateResponse(
+            accepted: 1,
+            dropped: 2,
+            droppedByReason:
+                {'invalid_event': 1, 'day_out_of_range': 1}.entries,
+            invalidEvents: [
+              eventspb.InvalidEvent(
+                index: 1,
+                violations: [
+                  r'event.kind: does not match regex pattern `^[a-zA-Z0-9_.-]+$`',
+                ],
+              ),
+            ],
+          ),
+        ),
+        logger,
+      );
+
+      await transport.sendBatch([
+        fakeEvent('signup'),
+        fakeEvent('Order Completed'),
+        fakeEvent('purchase'),
+      ]);
+
+      expect(logger.warnings, [
+        'Pug sent 3 events and the server accepted 1 (dropped: '
+            'day_out_of_range: 1, invalid_event: 1). Invalid event #1 '
+            '("Order Completed"): event.kind: does not match regex pattern '
+            r'`^[a-zA-Z0-9_.-]+$`.',
+      ]);
+    });
+
+    test('and names at most 10 invalid events', () async {
+      final logger = CapturingLogger();
+      final events = [for (var i = 0; i < 12; i++) fakeEvent('bad $i')];
+      final transport = transportAnswering(
+        report(
+          eventspb.BatchCreateResponse(
+            dropped: 12,
+            droppedByReason: {'invalid_event': 12}.entries,
+            invalidEvents: [
+              for (var i = 0; i < 12; i++)
+                eventspb.InvalidEvent(index: i, violations: ['rule $i']),
+            ],
+          ),
+        ),
+        logger,
+      );
+
+      await transport.sendBatch(events);
+
+      final warning = logger.warnings.single;
+      expect(
+        warning,
+        startsWith('Pug sent 12 events and the server accepted 0'),
+      );
+      expect(warning, contains('Invalid event #9 ("bad 9"): rule 9.'));
+      expect(warning, isNot(contains('#10')));
+      expect(warning, endsWith(' And 2 more invalid events.'));
+    });
+
+    test('and stays quiet when it accepts the whole batch', () async {
+      final logger = CapturingLogger();
+      final transport = transportAnswering(
+        report(eventspb.BatchCreateResponse(accepted: 2)),
+        logger,
+      );
+
+      await transport.sendBatch([fakeEvent('one'), fakeEvent('two')]);
+
+      expect(logger.warnings, isEmpty);
+    });
+
+    test('and counts an empty body as nothing accepted', () async {
+      final logger = CapturingLogger();
+      final transport = transportAnswering(http.Response('', 200), logger);
+
+      await transport.send(fakeEvent('one'));
+
+      expect(logger.warnings, ['Pug sent 1 event and the server accepted 0.']);
+    });
+
+    test(
+      'and warns, without failing the send, when it does not decode',
+      () async {
+        final logger = CapturingLogger();
+        final transport = transportAnswering(
+          http.Response.bytes(
+            const [0x08],
+            200,
+            headers: const {'content-type': 'application/proto'},
+          ),
+          logger,
+        );
+
+        await expectLater(transport.send(fakeEvent('one')), completes);
+
+        expect(logger.warnings, [
+          contains('could not decode the BatchCreate response'),
+        ]);
+      },
+    );
+
+    test(
+      'and warns through PugOptions.logger when PugClient builds it',
+      () async {
+        final logger = CapturingLogger();
+        var requests = 0;
+        final client = PugClient(
+          projectId: 'project',
+          options: PugOptions(
+            apiKey: 'key',
+            httpClient: MockClient((_) async {
+              requests += 1;
+              return report(
+                eventspb.BatchCreateResponse(
+                  dropped: 1,
+                  droppedByReason: {'invalid_event': 1}.entries,
+                ),
+              );
+            }),
+            storage: MemoryPugStorage(),
+            logger: logger,
+            autoPropertyProvider: const PugStaticAutoPropertyProvider({}),
+            autoTrack: false,
+            autoInstallEvents: false,
+            batch: const BatchConfig(maxWaitMs: 60000),
+          ),
+        );
+        await client.start();
+        addTearDown(client.destroy);
+
+        client.track('signup');
+        await client.flush();
+        await client.flush();
+
+        expect(requests, 1);
+        expect(client.queue.peekUnlocked(), isEmpty);
+        expect(logger.warnings, [
+          contains('the server accepted 0 (dropped: invalid_event: 1)'),
+        ]);
+      },
+    );
+  });
+
+  test(
+    'connect transport maps a 200 that is not protobuf as transient',
+    () async {
+      final transport = ConnectPugTransport(
+        endpoint: 'http://example.com',
+        apiKey: 'key',
+        httpClient: MockClient(
+          (request) async => http.Response(
+            '<html>Sign in to the Wi-Fi</html>',
+            200,
+            headers: const {'content-type': 'text/html; charset=utf-8'},
+          ),
+        ),
+      );
+      final transient = isA<PugTransportException>()
+          .having((error) => error.code, 'code', 'unavailable')
+          .having((error) => error.isPermanent, 'isPermanent', isFalse);
+
+      await expectLater(transport.send(fakeEvent('one')), throwsA(transient));
+      await expectLater(
+        transport.identify(
+          const IdentifyRequest(
+            projectId: 'project',
+            externalId: 'user-1',
+            traits: {},
+          ),
+        ),
+        throwsA(transient),
+      );
+    },
+  );
+
+  test('connect transport fails identify and subscribe on a body that is not '
+      'their empty response', () async {
+    ConnectPugTransport answering(http.Response response) =>
+        ConnectPugTransport(
+          endpoint: 'http://example.com',
+          apiKey: 'key',
+          httpClient: MockClient((_) async => response),
+        );
+    final page = http.Response('<html>Sign in to the Wi-Fi</html>', 200);
+    const request = IdentifyRequest(
+      projectId: 'project',
+      externalId: 'user-1',
+      traits: {},
+    );
+    final transient = isA<PugTransportException>()
+        .having((error) => error.code, 'code', 'unavailable')
+        .having((error) => error.isPermanent, 'isPermanent', isFalse);
+
+    await expectLater(answering(page).identify(request), throwsA(transient));
+    await expectLater(
+      answering(page).subscribeDevice(
+        const PushSubscription(
+          provider: 'fake',
+          platform: 'android',
+          token: 'token-1',
+          deviceId: 'device-1',
+        ),
+      ),
+      throwsA(transient),
+    );
+    await expectLater(
+      answering(http.Response('', 200)).identify(request),
+      completes,
+    );
   });
 
   test('connect transport maps a transient error response for retry', () async {

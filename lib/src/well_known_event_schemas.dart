@@ -9,6 +9,7 @@ const _stringField = WellKnownPropertyField(WellKnownPropertyType.string);
 const _intField = WellKnownPropertyField(WellKnownPropertyType.int32);
 const _doubleField = WellKnownPropertyField(WellKnownPropertyType.double);
 const _boolField = WellKnownPropertyField(WellKnownPropertyType.bool);
+const _durationField = WellKnownPropertyField(WellKnownPropertyType.duration);
 
 const wellKnownEventSchemas = <String, WellKnownEventSchema>{
   'add_to_cart': WellKnownEventSchema({
@@ -48,9 +49,19 @@ const wellKnownEventSchemas = <String, WellKnownEventSchema>{
     'previousVersion': _stringField,
   }),
   'audio_completed': WellKnownEventSchema({'audioId': _stringField}),
-  'audio_pause': WellKnownEventSchema({'audioId': _stringField}),
-  'audio_play': WellKnownEventSchema({'audioId': _stringField}),
-  'audio_seeked': WellKnownEventSchema({'audioId': _stringField}),
+  'audio_pause': WellKnownEventSchema({
+    'audioId': _stringField,
+    'position': _durationField,
+  }),
+  'audio_play': WellKnownEventSchema({
+    'audioId': _stringField,
+    'position': _durationField,
+  }),
+  'audio_seeked': WellKnownEventSchema({
+    'audioId': _stringField,
+    'fromPosition': _durationField,
+    'toPosition': _durationField,
+  }),
   'audio_started': WellKnownEventSchema({'audioId': _stringField}),
   'cart_viewed': WellKnownEventSchema({
     'cartId': _stringField,
@@ -87,6 +98,7 @@ const wellKnownEventSchemas = <String, WellKnownEventSchema>{
     'conversationId': _stringField,
     'callId': _stringField,
     'callType': _stringField,
+    'duration': _durationField,
   }),
   'chat_call_recording_started': WellKnownEventSchema({
     'conversationId': _stringField,
@@ -128,6 +140,7 @@ const wellKnownEventSchemas = <String, WellKnownEventSchema>{
   'chat_member_muted': WellKnownEventSchema({
     'conversationId': _stringField,
     'memberId': _stringField,
+    'muteDuration': _durationField,
   }),
   'chat_member_removed': WellKnownEventSchema({
     'conversationId': _stringField,
@@ -530,9 +543,19 @@ const wellKnownEventSchemas = <String, WellKnownEventSchema>{
     'planId': _stringField,
   }),
   'video_completed': WellKnownEventSchema({'videoId': _stringField}),
-  'video_pause': WellKnownEventSchema({'videoId': _stringField}),
-  'video_play': WellKnownEventSchema({'videoId': _stringField}),
-  'video_seeked': WellKnownEventSchema({'videoId': _stringField}),
+  'video_pause': WellKnownEventSchema({
+    'videoId': _stringField,
+    'position': _durationField,
+  }),
+  'video_play': WellKnownEventSchema({
+    'videoId': _stringField,
+    'position': _durationField,
+  }),
+  'video_seeked': WellKnownEventSchema({
+    'videoId': _stringField,
+    'fromPosition': _durationField,
+    'toPosition': _durationField,
+  }),
   'video_started': WellKnownEventSchema({'videoId': _stringField}),
   'wishlist_added': WellKnownEventSchema({
     'productId': _stringField,

@@ -49,6 +49,16 @@ void main() {
     );
     expect(encoded, inInclusiveRange(before, after));
   });
+
+  test('durations past 32 bits of milliseconds keep every digit on web', () {
+    final mapped = const PropertyMapper().mapProperties({
+      'long': const Duration(days: 100, milliseconds: 123),
+      'negative': const Duration(days: -100, milliseconds: -123),
+    });
+
+    expect(mapped['long']?.value, '8640000.123s');
+    expect(mapped['negative']?.value, '-8640000.123s');
+  });
 }
 
 class _RecordingTransport implements PugTransport {

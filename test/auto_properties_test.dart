@@ -127,6 +127,19 @@ void main() {
   });
 
   test(
+    'linux sends no device fields, since os-release names the distro',
+    () async {
+      final props = await SystemPugAutoPropertyProvider.deviceProperties(
+        _ChannelSpy(),
+        isWeb: false,
+        operatingSystem: 'linux',
+      );
+
+      expect(props, isEmpty);
+    },
+  );
+
+  test(
     'android auto-properties expose device fields but never the PII name',
     () {
       // Drives the Android mapping directly: the host runs on Linux, so the
@@ -295,4 +308,7 @@ class _ChannelSpy extends DeviceInfoPlugin {
 
   @override
   Future<MacOsDeviceInfo> get macOsInfo async => throw const _Reached('macos');
+
+  @override
+  Future<LinuxDeviceInfo> get linuxInfo async => throw const _Reached('linux');
 }

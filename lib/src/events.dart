@@ -118,7 +118,35 @@ class PropertyMapper {
     String kind,
     Map<String, Object?> properties,
   ) {
-    return mapProperties(properties);
+    final custom = <String, Object?>{};
+    for (final MapEntry(:key, :value) in properties.entries) {
+      if (value != null && key.startsWith(r'$')) {
+        logger.warn(
+          'Pug dropped property "$key" on event "$kind": keys starting with '
+          '"\$" are reserved for auto-properties.',
+        );
+        continue;
+      }
+      custom[key] = value;
+    }
+    return mapProperties(custom);
+  }
+
+  Map<String, PropertyValue> mapAutoProperties(
+    Map<String, Object?> properties,
+  ) {
+    final auto = <String, Object?>{};
+    for (final MapEntry(:key, :value) in properties.entries) {
+      if (value != null && !key.startsWith(r'$')) {
+        logger.warn(
+          'Pug dropped auto-property "$key": auto-property keys must start '
+          'with "\$".',
+        );
+        continue;
+      }
+      auto[key] = value;
+    }
+    return mapProperties(auto);
   }
 
   PropertyValue? _mapValue(Object? value) {
@@ -146,6 +174,9 @@ class PropertyMapper {
     }
     if (value is DateTime) {
       return PropertyValue.timestamp(value.toUtc().millisecondsSinceEpoch);
+    }
+    if (value is Duration) {
+      return PropertyValue.string(_durationText(value));
     }
     if (value is Iterable || value is Map) {
       try {
@@ -185,11 +216,31 @@ class PropertyMapper {
   }
 }
 
+// options.proto's text form for a google.protobuf.Duration ("0s", "1.5s"),
+// rounded to the millisecond as sdk-android and sdk-ios send it, so one
+// duration is one value across SDKs.
+String _durationText(Duration duration) {
+  final micros = duration.inMicroseconds;
+  final millis = (micros.abs() + 500) ~/ 1000;
+  final sign = micros < 0 && millis > 0 ? '-' : '';
+  final seconds = millis ~/ 1000;
+  final fraction = millis % 1000;
+  if (fraction == 0) {
+    return '$sign${seconds}s';
+  }
+  final digits = fraction
+      .toString()
+      .padLeft(3, '0')
+      .replaceFirst(RegExp(r'0+$'), '');
+  return '$sign$seconds.${digits}s';
+}
+
 enum WellKnownPropertyType {
   string('a string'),
   int32('an integer'),
   double('a finite number'),
-  bool('a boolean');
+  bool('a boolean'),
+  duration('a duration');
 
   const WellKnownPropertyType(this.description);
 
