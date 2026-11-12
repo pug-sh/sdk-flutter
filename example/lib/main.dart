@@ -1,3 +1,6 @@
+// Flutter 3.50 moves this to package:material_ui, which needs Flutter 3.47+,
+// above the SDK's 3.29 floor.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:pug_flutter/pug_flutter.dart';
 

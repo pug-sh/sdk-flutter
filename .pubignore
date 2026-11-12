@@ -10,6 +10,7 @@
 
 # Internal / AI / planning docs
 CLAUDE.md
+known-bugs.md
 
 # Build tooling and sources (generated output already lives in lib/src/gen/)
 Makefile

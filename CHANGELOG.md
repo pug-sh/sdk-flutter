@@ -1,4 +1,4 @@
-## Unreleased
+## 0.1.0
 
 * Drop, with a warning, an event whose kind the server rejects: a kind may only
   contain letters, digits, `_`, `.` and `-`, so `Order Completed` or

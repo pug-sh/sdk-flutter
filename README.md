@@ -31,7 +31,7 @@ Or add it to `pubspec.yaml` directly:
 
 ```yaml
 dependencies:
-  pug_flutter: ^0.0.8
+  pug_flutter: ^0.1.0
 ```
 
 ## Initialize
