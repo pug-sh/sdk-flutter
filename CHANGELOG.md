@@ -1,3 +1,13 @@
+## 0.1.1
+
+* pub.dev lists web support. `lib/src/auto_properties.dart` imported `dart:io`
+  unconditionally, which kept web off the package's platforms though the SDK
+  runs there; `Platform` now comes from a conditional import. Nothing changes
+  at runtime.
+* The package description, topics, homepage, issue tracker and documentation
+  links now say what the package is, for pub.dev search, and the README says
+  which platforms get screen views.
+
 ## 0.1.0
 
 * Drop, with a warning, an event whose kind the server rejects: a kind may only

@@ -1,6 +1,6 @@
 # Pug Flutter SDK
 
-Flutter SDK for Pug analytics, profile identity, session tracking, and batching.
+Open-source product analytics SDK for Flutter, from [Pug](https://pug.sh), with profile identity, sessions, a consent gate, and batched delivery. It tracks app opens and installs on its own, and once `PugRouteObserver` is on your navigator, screen views on Android and iOS and page views on the web.
 
 The SDK sends binary protobuf payloads to the Pug backend and keeps transport and storage injectable for tests and custom integrations.
 
@@ -31,7 +31,7 @@ Or add it to `pubspec.yaml` directly:
 
 ```yaml
 dependencies:
-  pug_flutter: ^0.1.0
+  pug_flutter: ^0.1.1
 ```
 
 ## Initialize

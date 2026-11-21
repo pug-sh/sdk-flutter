@@ -1,8 +1,16 @@
 name: pug_flutter
-description: "Pug analytics, identity, session tracking, and event batching SDK for Flutter."
-version: 0.1.0
-homepage: https://github.com/pug-sh/sdk-flutter
+description: "Open-source product analytics SDK for Flutter: tracks app opens and installs, and screen views on Android and iOS, with identity, sessions and a consent gate."
+version: 0.1.1
+homepage: https://pug.sh/integrations/flutter
 repository: https://github.com/pug-sh/sdk-flutter
+issue_tracker: https://github.com/pug-sh/sdk-flutter/issues
+documentation: https://docs.pug.sh/sdks/flutter/
+topics:
+  - analytics
+  - product-analytics
+  - tracking
+  - events
+  - telemetry
 
 environment:
   sdk: ">=3.7.0 <4.0.0"
