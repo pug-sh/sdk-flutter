@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' if (dart.library.js_interop) 'platform_web.dart' show Platform;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
