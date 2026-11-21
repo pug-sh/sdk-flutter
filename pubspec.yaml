@@ -1,5 +1,5 @@
 name: pug_flutter
-description: "Open-source product analytics SDK for Flutter: tracks app opens, installs and screen views, with identity, sessions and a consent gate."
+description: "Open-source product analytics SDK for Flutter: tracks app opens and installs, and screen views on Android and iOS, with identity, sessions and a consent gate."
 version: 0.1.0
 homepage: https://pug.sh/integrations/flutter
 repository: https://github.com/pug-sh/sdk-flutter
