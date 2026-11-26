@@ -14,6 +14,8 @@ import 'dart:core' as $core;
 
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
+import 'package:protobuf/well_known_types/google/protobuf/duration.pb.dart'
+    as $1;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
     as $0;
 
@@ -25,6 +27,7 @@ enum PropertyValue_Value {
   doubleValue,
   boolValue,
   timestampValue,
+  durationValue,
   notSet
 }
 
@@ -33,9 +36,11 @@ enum PropertyValue_Value {
 /// oneof.required option below.
 ///
 /// Lists, objects, and other compound types are intentionally not included
-/// in this iteration — only the five primitive types supported by the
-/// ClickHouse Variant storage target. New variants can be added later as
-/// additive oneof entries (wire-compatible).
+/// in this iteration: only primitive types the ClickHouse Variant storage
+/// target can hold. A server older than a oneof case sees no case set and
+/// drops the event, and a server before v0.0.55 rejects the whole batch. An
+/// events worker older than the case, behind a newer server, sends the whole
+/// batch to the DLQ. So SDKs must not send a case their deployment predates.
 class PropertyValue extends $pb.GeneratedMessage {
   factory PropertyValue({
     $core.String? stringValue,
@@ -43,6 +48,7 @@ class PropertyValue extends $pb.GeneratedMessage {
     $core.double? doubleValue,
     $core.bool? boolValue,
     $0.Timestamp? timestampValue,
+    $1.Duration? durationValue,
   }) {
     final result = create();
     if (stringValue != null) result.stringValue = stringValue;
@@ -50,6 +56,7 @@ class PropertyValue extends $pb.GeneratedMessage {
     if (doubleValue != null) result.doubleValue = doubleValue;
     if (boolValue != null) result.boolValue = boolValue;
     if (timestampValue != null) result.timestampValue = timestampValue;
+    if (durationValue != null) result.durationValue = durationValue;
     return result;
   }
 
@@ -69,19 +76,22 @@ class PropertyValue extends $pb.GeneratedMessage {
     3: PropertyValue_Value.doubleValue,
     4: PropertyValue_Value.boolValue,
     5: PropertyValue_Value.timestampValue,
+    6: PropertyValue_Value.durationValue,
     0: PropertyValue_Value.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'PropertyValue',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'common.v1'),
       createEmptyInstance: create)
-    ..oo(0, [1, 2, 3, 4, 5])
+    ..oo(0, [1, 2, 3, 4, 5, 6])
     ..aOS(1, _omitFieldNames ? '' : 'stringValue')
     ..aInt64(2, _omitFieldNames ? '' : 'intValue')
     ..aD(3, _omitFieldNames ? '' : 'doubleValue')
     ..aOB(4, _omitFieldNames ? '' : 'boolValue')
     ..aOM<$0.Timestamp>(5, _omitFieldNames ? '' : 'timestampValue',
         subBuilder: $0.Timestamp.create)
+    ..aOM<$1.Duration>(6, _omitFieldNames ? '' : 'durationValue',
+        subBuilder: $1.Duration.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -108,6 +118,7 @@ class PropertyValue extends $pb.GeneratedMessage {
   @$pb.TagNumber(3)
   @$pb.TagNumber(4)
   @$pb.TagNumber(5)
+  @$pb.TagNumber(6)
   PropertyValue_Value whichValue() =>
       _PropertyValue_ValueByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(1)
@@ -115,6 +126,7 @@ class PropertyValue extends $pb.GeneratedMessage {
   @$pb.TagNumber(3)
   @$pb.TagNumber(4)
   @$pb.TagNumber(5)
+  @$pb.TagNumber(6)
   void clearValue() => $_clearField($_whichOneof(0));
 
   /// Cap property string values at 1024 Unicode codepoints. Large blobs
@@ -179,6 +191,19 @@ class PropertyValue extends $pb.GeneratedMessage {
   void clearTimestampValue() => $_clearField(5);
   @$pb.TagNumber(5)
   $0.Timestamp ensureTimestampValue() => $_ensure(4);
+
+  /// Stored as seconds in the Float64 Variant slot, like double_value, so
+  /// SUM, AVG and numeric filters work on it.
+  @$pb.TagNumber(6)
+  $1.Duration get durationValue => $_getN(5);
+  @$pb.TagNumber(6)
+  set durationValue($1.Duration value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasDurationValue() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearDurationValue() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $1.Duration ensureDurationValue() => $_ensure(5);
 }
 
 const $core.bool _omitFieldNames =

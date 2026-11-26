@@ -231,10 +231,10 @@ class InvalidEvent extends $pb.GeneratedMessage {
   $pb.PbList<$core.String> get violations => $_getList(1);
 }
 
-/// Never sent. BatchCreate validates each event as one: Event's rules plus two
-/// that hold only at the SDK boundary, since the server fills a cookieless
-/// event's identity with 'cookieless-' ids before the EventBatch envelope
-/// re-validates it.
+/// Never sent. BatchCreate validates each event as one: Event's rules plus those
+/// that hold only at the SDK boundary, since the server fills a cookieless or
+/// crawler_request event's identity, with 'cookieless-' or 'crawler-' ids,
+/// before the EventBatch envelope re-validates it.
 class IncomingEvent extends $pb.GeneratedMessage {
   factory IncomingEvent({
     Event? event,
@@ -291,6 +291,73 @@ class IncomingEvent extends $pb.GeneratedMessage {
   Event ensureEvent() => $_ensure(0);
 }
 
+/// The requester a customer's server saw. The server checks it and drops it.
+class Client extends $pb.GeneratedMessage {
+  factory Client({
+    $core.String? ip,
+    $core.String? userAgent,
+  }) {
+    final result = create();
+    if (ip != null) result.ip = ip;
+    if (userAgent != null) result.userAgent = userAgent;
+    return result;
+  }
+
+  Client._();
+
+  factory Client.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory Client.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'Client',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'sdk.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'ip')
+    ..aOS(2, _omitFieldNames ? '' : 'userAgent')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Client clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Client copyWith(void Function(Client) updates) =>
+      super.copyWith((message) => updates(message as Client)) as Client;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static Client create() => Client._();
+  @$core.override
+  Client createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static Client getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Client>(create);
+  static Client? _defaultInstance;
+
+  /// Empty when the caller doesn't know it.
+  @$pb.TagNumber(1)
+  $core.String get ip => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set ip($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasIp() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearIp() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get userAgent => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set userAgent($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasUserAgent() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearUserAgent() => $_clearField(2);
+}
+
 class Event extends $pb.GeneratedMessage {
   factory Event({
     $core.String? eventId,
@@ -303,6 +370,7 @@ class Event extends $pb.GeneratedMessage {
     $0.Timestamp? occurTime,
     $core.String? sessionId,
     $core.bool? cookieless,
+    Client? client,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -315,6 +383,7 @@ class Event extends $pb.GeneratedMessage {
     if (occurTime != null) result.occurTime = occurTime;
     if (sessionId != null) result.sessionId = sessionId;
     if (cookieless != null) result.cookieless = cookieless;
+    if (client != null) result.client = client;
     return result;
   }
 
@@ -354,6 +423,7 @@ class Event extends $pb.GeneratedMessage {
         subBuilder: $0.Timestamp.create)
     ..aOS(7, _omitFieldNames ? '' : 'sessionId')
     ..aOB(8, _omitFieldNames ? '' : 'cookieless')
+    ..aOM<Client>(9, _omitFieldNames ? '' : 'client', subBuilder: Client.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -389,9 +459,11 @@ class Event extends $pb.GeneratedMessage {
   @$pb.TagNumber(3)
   $pb.PbMap<$core.String, $1.PropertyValue> get customProperties => $_getMap(2);
 
-  /// Empty only when cookieless (event.identity_required_unless_cookieless);
-  /// never client-settable to a 'cookieless-'-prefixed value
-  /// (incoming_event.distinct_id_reserved_prefix).
+  /// Empty only when cookieless or a crawler_request
+  /// (event.identity_required_unless_cookieless); never client-settable to a
+  /// 'cookieless-' or 'crawler-'-prefixed value
+  /// (incoming_event.distinct_id_reserved_prefix and
+  /// incoming_event.distinct_id_reserved_crawler_prefix).
   @$pb.TagNumber(4)
   $core.String get distinctId => $_getSZ(3);
   @$pb.TagNumber(4)
@@ -444,6 +516,19 @@ class Event extends $pb.GeneratedMessage {
   $core.bool hasCookieless() => $_has(7);
   @$pb.TagNumber(8)
   void clearCookieless() => $_clearField(8);
+
+  /// Only on a crawler_request event, and only from a private key, which a crawler
+  /// collector sends from the site's server.
+  @$pb.TagNumber(9)
+  Client get client => $_getN(8);
+  @$pb.TagNumber(9)
+  set client(Client value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasClient() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearClient() => $_clearField(9);
+  @$pb.TagNumber(9)
+  Client ensureClient() => $_ensure(8);
 }
 
 class EventBatch extends $pb.GeneratedMessage {
