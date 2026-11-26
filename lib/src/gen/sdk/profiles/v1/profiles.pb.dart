@@ -75,11 +75,11 @@ class IdentifyRequest extends $pb.GeneratedMessage {
 
   /// Stable, unique user identifier: your database user ID, not an email, which
   /// can change.
-  /// The 'cookieless-' prefix is server-owned: ingest mints those ids and the
-  /// reserved-prefix rule on an incoming event's distinct_id already refuses them
-  /// from clients. external_id needs the same guard because post-identify events
-  /// are keyed by external_id, so an id accepted here comes back as a distinct_id
-  /// and BatchCreate drops every event of that user.
+  /// The 'cookieless-' and 'crawler-' prefixes are server-owned: ingest mints
+  /// those ids and the reserved-prefix rules on an incoming event's distinct_id
+  /// already refuse them from clients. external_id needs the same guard because
+  /// post-identify events are keyed by external_id, so an id accepted here comes
+  /// back as a distinct_id and BatchCreate drops every event of that user.
   @$pb.TagNumber(1)
   $core.String get externalId => $_getSZ(0);
   @$pb.TagNumber(1)
